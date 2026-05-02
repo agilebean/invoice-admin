@@ -1,0 +1,7 @@
+# Local dev: use mamba (not venv). CI still uses setup-python + pip — see .github/workflows/ci.yml
+name: googleads-invoice-glugglejug
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip

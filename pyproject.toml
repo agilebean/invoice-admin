@@ -11,6 +11,9 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = ["pypdf>=5.0"]
 
+[project.scripts]
+googleads-invoice = "googleads_invoice.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "selenium>=4.15"]
 

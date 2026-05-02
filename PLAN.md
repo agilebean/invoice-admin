@@ -55,10 +55,10 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 | Field | Detail |
 |--|--|
 | **Story** | As the repo maintainer, I can clone a clean copy, follow the README setup, and run **`pytest`** locally while **CI runs the same checks on push/PR**, so I no longer wonder whether packaging, imports, or the workflow are miswired before I add real Gmail/PDF logic. |
-| **In scope** | `pyproject.toml` (+ optional `uv`/`pip` ergonomics doc), runnable `pytest` baseline, trivial package layout (`src/…`), one smoke test asserting `True`, GitHub Action `pytest` on push/PR, `.gitignore` for Python/OS cruft |
+| **In scope** | `pyproject.toml`, **`environment.yml`** (mamba), runnable `pytest` baseline, trivial package layout (`src/…`), one smoke test asserting `True`, GitHub Action `pytest` on push/PR, `.gitignore` for Python/OS cruft |
 | **Out of scope** | Gmail, Selenium, PDF parsing, PDF fixtures, OAuth, Brave |
-| **Acceptance criteria** | Fresh checkout → documented `venv`/`uv sync` + `pytest` → pass locally; GH Actions completes green on repo default branch |
-| **Retrospective** | **Smoke vs `assert True`:** import + `__version__` gives a stronger “package wired correctly” signal without extra deps.<br><br>**Pytest + `src/`:** `[tool.pytest.ini_options] pythonpath = ["src"]` keeps `pytest` working without an editable install; CI still uses `pip install -e ".[dev]"` so packaging stays exercised.<br><br>**Hatchling:** wheel `packages = ["src/googleads_invoice"]` matches the layout—if package name or paths move, update wheel config and pytest `pythonpath` together.<br><br>**uv:** README documents `uv pip install -e ".[dev]"` because there is no lockfile yet; consider `[dependency-groups]` + `uv sync` later if the team standardizes on lockfiles.<br><br>**CI:** workflow pins push to `main`; rename default branch or use multiple protected branches → adjust `on.push.branches`. |
+| **Acceptance criteria** | Fresh checkout → documented **mamba** env + **`pip install -e ".[dev]"`** + **`pytest`** → pass locally; GH Actions completes green on repo default branch |
+| **Retrospective** | **Smoke vs `assert True`:** import + `__version__` gives a stronger “package wired correctly” signal without extra deps.<br><br>**Pytest + `src/`:** `[tool.pytest.ini_options] pythonpath = ["src"]` keeps `pytest` working without an editable install; CI still uses `pip install -e ".[dev]"` so packaging stays exercised.<br><br>**Hatchling:** wheel `packages = ["src/googleads_invoice"]` matches the layout—if package name or paths move, update wheel config and pytest `pythonpath` together.<br><br>**Local env:** **`environment.yml`** + **mamba** (not **`venv`**); Python deps stay in **`pyproject.toml`** via **`pip install -e`.**<br><br>**CI:** workflow pins push to `main`; rename default branch or use multiple protected branches → adjust `on.push.branches`. |
 
 ---
 
@@ -82,7 +82,7 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 | **In scope** | Pure functions e.g. `parse_invoice_pdf(path \| bytes)` returning date + Decimal amount; smallest **synthetic** PDFs checked in-repo (later add **redacted** real sample if layout differs) |
 | **Out of scope** | OCR, Gmail, renaming template, Brave, mail send |
 | **Acceptance criteria** | ≥3 fixtures covering: normal EUR “amount due”, European decimal commas if Google emits them; wrong file type → loud failure |
-| **Retrospective** | **Library:** **`pypdf`** covers text extraction for tiny synthetic PDFs; **pdfplumber / PyMuPDF** remain options if layout/encoding gets harder—swap behind the same `parse_invoice_pdf` contract and keep fixtures assertive.<br><br>**How fixtures were made:** PDFs were generated **once** with **reportlab** in a dev venv and **committed**; **reportlab is not** a declared project dependency so CI stays lean—regenerate only when fixture content must change.<br><br>**Parsing contract:** implementation keys off **`Invoice date: YYYY-MM-DD`** and **`Amount due:`** plus EUR normalization (**`1,234.56`** vs **`1.234,56`**); real Google invoices may use different copy—add a **redacted real PDF** fixture before trusting production mail PDFs.<br><br>**Errors:** **`InvoicePdfError`** subclasses **`ValueError`**; non-PDF / corrupt bytes surface as **`InvoicePdfError`** wrapping **`PdfReadError`** so callers get one family for “can’t read / can’t parse”. |
+| **Retrospective** | **Library:** **`pypdf`** covers text extraction for tiny synthetic PDFs; **pdfplumber / PyMuPDF** remain options if layout/encoding gets harder—swap behind the same `parse_invoice_pdf` contract and keep fixtures assertive.<br><br>**How fixtures were made:** PDFs were generated **once** with **reportlab** in an ad hoc tool env and **committed**; **reportlab is not** a declared project dependency so CI stays lean—regenerate only when fixture content must change.<br><br>**Parsing contract:** implementation keys off **`Invoice date: YYYY-MM-DD`** and **`Amount due:`** plus EUR normalization (**`1,234.56`** vs **`1.234,56`**); real Google invoices may use different copy—add a **redacted real PDF** fixture before trusting production mail PDFs.<br><br>**Errors:** **`InvoicePdfError`** subclasses **`ValueError`**; non-PDF / corrupt bytes surface as **`InvoicePdfError`** wrapping **`PdfReadError`** so callers get one family for “can’t read / can’t parse”. |
 
 ---
 
@@ -122,12 +122,15 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 
 ---
 
-### Iterations 7+ (final slice)
+### Iteration 7 — “CLI orchestration” ✅
 
-| # | Story | Rough scope |
-|--|----------------|-------------|
-| 7 | As the repo maintainer, I can drive the **full monthly sequence from one CLI entrypoint** (pure steps + injected fakes in tests), so I can actually **operate** the flow end-to-end instead of stitching one-off scripts together. | one entrypoint invoking pure steps; smoke with fakes |
-| **Retrospective** | *Fill when Iteration 7 ships—CLI UX, config/env, dry-run vs live.* | |
+| Field | Detail |
+|--|--|
+| **Story** | As the repo maintainer, I can drive the **full monthly sequence from one CLI entrypoint** (pure steps + injected fakes in tests), so I can actually **operate** the flow end-to-end instead of stitching one-off scripts together. |
+| **In scope** | **`run_dry_run`** + **`DryRunReport`** in **`pipeline`**, **`googleads-invoice`** / **`python -m googleads_invoice`** subcommand **`dry-run`**; tests use **committed fixtures** as fakes (no network, no OAuth) |
+| **Out of scope** | Live Gmail send, real browser download on the default **`dry-run`** path, **`launchd`**, config files / dotenv |
+| **Acceptance criteria** | **`pytest -q`** green; **`dry-run`** prints URL + PDF fields + mail artifacts; missing subcommand exits non‑zero |
+| **Retrospective** | **One subcommand first:** **`dry-run`** validates composition without secrets; add **`send`** / **`download`** later behind the same **`pipeline`** boundaries + typed backends.<br><br>**Fixture fakes:** tests aim **`run_dry_run`** at **`tests/fixtures/...`**; use saved redacted HTML/PDF paths locally without code changes.<br><br>**Scripts vs module:** **`[project.scripts]`** installs **`googleads-invoice`** on **`pip install -e .`**; **`__main__`** keeps **`python -m`** parity when PATH is constrained.<br><br>**Not wired in CLI yet:** headed download + Gmail live calls remain **explicit follow-ups**—fold them into **`pipeline`** with feature flags when implementations exist. |
 
 ---
 
