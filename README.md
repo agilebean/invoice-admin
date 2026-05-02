@@ -26,7 +26,19 @@ uv pip install -e ".[dev]"
 pytest
 ```
 
-CI runs the same install and **`pytest`** on push and pull requests (see `.github/workflows/ci.yml`).
+CI runs the same install and **`pytest`** on push and pull requests (see `.github/workflows/ci.yml`). **`@pytest.mark.e2e`** browser tests are **skipped in CI** and **skipped locally** unless you set **`RUN_E2E=1`**.
+
+### Browser / e2e (optional, local)
+
+Requires **Chrome** or **Chromium** on `PATH` (Selenium 4 manages **ChromeDriver** automatically in most setups). For a **headless** run (no window), set **`HEADLESS_E2E=1`**. To match production **Brave**, pass **`binary_location=`** into **`build_chrome_options`** from your install path.
+
+```bash
+RUN_E2E=1 pytest -m e2e
+# or headless:
+HEADLESS_E2E=1 RUN_E2E=1 pytest -m e2e
+```
+
+**Manual fallback:** if automated download is flaky (corporate policies, `file:` restrictions), use the headed browser yourself: open the billing URL with the same **download directory** and **user-data-dir** policy as in **`PLAN.md`**, then place the saved PDF where the CLI expects it once Iteration 7 wires paths.
 
 ## Repository
 

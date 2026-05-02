@@ -12,7 +12,7 @@ license = { text = "MIT" }
 dependencies = ["pypdf>=5.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "selenium>=4.15"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/googleads_invoice"]
@@ -20,3 +20,6 @@ packages = ["src/googleads_invoice"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "e2e: headed browser download (RUN_E2E=1 locally; skipped in CI)",
+]

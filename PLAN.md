@@ -110,13 +110,24 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 
 ---
 
-### Iterations 6+ (thin slices, keep order)
+### Iteration 6 — “PDF download glue (browser)” ✅
+
+| Field | Detail |
+|--|--|
+| **Story** | As the repo maintainer, I can run an **`@pytest.mark.e2e`** path locally that uses a **headed browser profile** to **download the invoice PDF**, with CI staying fast/skipped—so I’m not blocked when pure HTTP won’t suffice, and there’s an honest place for “real browser” behavior. |
+| **In scope** | **`build_chrome_options`** (download dir, optional **`user_data_dir`**, **`binary_location`**, **`headless`**) + **`click_and_wait_for_pdf`**; **`pytest` marker `e2e`** skipped on **CI** and unless **`RUN_E2E=1`**; **README** manual fallback note |
+| **Out of scope** | Google login automation, Ads paywall flows, scheduling **`launchd`**, Brave-specific packaging beyond **`binary_location`** |
+| **Acceptance criteria** | Default **`pytest`** stays **fast** (e2e skipped); unit tests lock Chrome prefs/args; local **`RUN_E2E=1 pytest -m e2e`** exercises download **smoke** |
+| **Retrospective** | **Skip gates:** **`CI` / `GITHUB_ACTIONS`** + **`RUN_E2E=1`** keep GitHub green while preserving an explicit local switch—don’t run e2e in CI until you add a dedicated runner + secrets policy.<br><br>**`file:` fixture:** the e2e uses a **local HTML + PDF `file:` URL** to avoid network; **real invoices** may still need **`https:`** + logged-in profile smoke—extend with a redacted staging URL when ready.<br><br>**Headless vs headed:** **`HEADLESS_E2E=1`** is a dev convenience; production **`PLAN`** flow stays **headed**; document **`binary_location`** for **Brave** on each OS.<br><br>**Downloads directory:** **`plugins.always_open_pdf_externally`** nudges PDFs into the download folder; if Chrome changes behavior, adjust prefs and lock with the same e2e test. |
+
+---
+
+### Iterations 7+ (final slice)
 
 | # | Story | Rough scope |
 |--|----------------|-------------|
-| 6 | As the repo maintainer, I can run an **`@pytest.mark.e2e`** path locally that uses a **headed browser profile** to **download the invoice PDF**, with CI staying fast/skipped—so I’m not blocked when pure HTTP won’t suffice, and there’s an honest place for “real browser” behavior. | `@pytest.mark.e2e`; optional manual fallback doc |
 | 7 | As the repo maintainer, I can drive the **full monthly sequence from one CLI entrypoint** (pure steps + injected fakes in tests), so I can actually **operate** the flow end-to-end instead of stitching one-off scripts together. | one entrypoint invoking pure steps; smoke with fakes |
-| **Retrospective** | *Add a short note per row (or per PR) when #6–#7 ship—patterns for fakes vs live, e2e skips, CLI UX.* | |
+| **Retrospective** | *Fill when Iteration 7 ships—CLI UX, config/env, dry-run vs live.* | |
 
 ---
 
