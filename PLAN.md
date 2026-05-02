@@ -98,14 +98,25 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 
 ---
 
-### Iterations 5+ (thin slices, keep order)
+### Iteration 5 — “Gmail-send adapter façade” ✅
+
+| Field | Detail |
+|--|--|
+| **Story** | As the repo maintainer, I can exercise **“list / send mail”** through a **small adapter** with **mocks in CI**, so I can integrate Gmail later **without OAuth in tests** and still catch API-shape mistakes early. |
+| **In scope** | **`GmailBackend`** protocol, **`GmailFacade`** delegating **`list_messages`** + **`send_plain_text`**, **`GmailMessageSummary`**, **`GmailTransportError`**; unit tests with **`unittest.mock`** only |
+| **Out of scope** | **google-api-python-client**, OAuth, credentials, MIME/attachments, batching, real network |
+| **Acceptance criteria** | **`pytest -q`** verifies delegation / argument shapes; backend failures surface as **`GmailTransportError`** without double-wrapping |
+| **Retrospective** | **Protocol, not SDK types:** **`GmailBackend`** stays free of **`googleapiclient`** dicts so tests stay small; add a **`GoogleApiclientBackend`** later that implements the protocol.<br><br>**Wrap once:** façade converts arbitrary backend exceptions to **`GmailTransportError`**; backends that already raise **`GmailTransportError`** pass through—keep orchestration **`except`** simple.<br><br>**Naming:** **`list_messages(query, max_results=...)`** mirrors search UX; wire **`q`** to **`users.messages.list`** when implementing the real client.<br><br>**Plain text only:** **`send_plain_text`** is enough for Jack’s monthly mail; **attachments** belong in a follow-up signature + adapter method once PDF bytes flow end-to-end. |
+
+---
+
+### Iterations 6+ (thin slices, keep order)
 
 | # | Story | Rough scope |
 |--|----------------|-------------|
-| 5 | As the repo maintainer, I can exercise **“list / send mail”** through a **small adapter** with **mocks in CI**, so I can integrate Gmail later **without OAuth in tests** and still catch API-shape mistakes early. | mocked API only in CI (`send`, optional `messages.list` façade); typed errors |
 | 6 | As the repo maintainer, I can run an **`@pytest.mark.e2e`** path locally that uses a **headed browser profile** to **download the invoice PDF**, with CI staying fast/skipped—so I’m not blocked when pure HTTP won’t suffice, and there’s an honest place for “real browser” behavior. | `@pytest.mark.e2e`; optional manual fallback doc |
 | 7 | As the repo maintainer, I can drive the **full monthly sequence from one CLI entrypoint** (pure steps + injected fakes in tests), so I can actually **operate** the flow end-to-end instead of stitching one-off scripts together. | one entrypoint invoking pure steps; smoke with fakes |
-| **Retrospective** | *Add a short note per row (or per PR) when #5–#7 ship—patterns for fakes vs live, e2e skips, CLI UX.* | |
+| **Retrospective** | *Add a short note per row (or per PR) when #6–#7 ship—patterns for fakes vs live, e2e skips, CLI UX.* | |
 
 ---
 
