@@ -86,15 +86,26 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 
 ---
 
-### Iterations 4+ (thin slices, keep order)
+### Iteration 4 — “Filename + email helpers” ✅
+
+| Field | Detail |
+|--|--|
+| **Story** | As the repo maintainer, I can turn **parsed date + euros (+ month label)** into **filename and email-body fragments** via pure helpers, so each run’s naming and Jack’s message stay **repeatable and test-covered** instead of hand-edited strings. |
+| **In scope** | Frozen struct **`InvoiceOutputFields`**; pure builders **`build_renamed_pdf_filename`**, **`build_email_subject`**, **`build_email_body`**; unit tests only |
+| **Out of scope** | Gmail send, actual rename on disk, HTML email, localization beyond provided **`month_label`**, Jack’s real address in constants |
+| **Acceptance criteria** | **`pytest -q`** locks strings for representative dates/amounts (incl. whole-euro filename stem); changing copy requires updating tests deliberately |
+| **Retrospective** | **Single struct:** **`InvoiceOutputFields`** keeps PDF output + mail copy aligned—add fields in one place if CC/subject templates grow.<br><br>**`month_label`:** callers supply the human month string (e.g. “March 2026”); **no locale guessing** in the library—derive in the CLI/orchestrator when you add **`babel`** or a simple map if needed.<br><br>**Amount formatting:** filenames use a **trimmed plain** amount (**`1000`** not **`1000.00`**); email uses **two decimal places**—if you need one style everywhere, pick one and adjust tests.<br><br>**Copy is a contract:** greeting and em dash in subject/body are **frozen by tests**; tweak wording only when Jack agrees and you update assertions. |
+
+---
+
+### Iterations 5+ (thin slices, keep order)
 
 | # | Story | Rough scope |
 |--|----------------|-------------|
-| 4 | As the repo maintainer, I can turn **parsed date + euros (+ month label)** into **filename and email-body fragments** via pure helpers, so each run’s naming and Jack’s message stay **repeatable and test-covered** instead of hand-edited strings. | deterministic string builders from structs (date/month/€), unit tests |
 | 5 | As the repo maintainer, I can exercise **“list / send mail”** through a **small adapter** with **mocks in CI**, so I can integrate Gmail later **without OAuth in tests** and still catch API-shape mistakes early. | mocked API only in CI (`send`, optional `messages.list` façade); typed errors |
 | 6 | As the repo maintainer, I can run an **`@pytest.mark.e2e`** path locally that uses a **headed browser profile** to **download the invoice PDF**, with CI staying fast/skipped—so I’m not blocked when pure HTTP won’t suffice, and there’s an honest place for “real browser” behavior. | `@pytest.mark.e2e`; optional manual fallback doc |
 | 7 | As the repo maintainer, I can drive the **full monthly sequence from one CLI entrypoint** (pure steps + injected fakes in tests), so I can actually **operate** the flow end-to-end instead of stitching one-off scripts together. | one entrypoint invoking pure steps; smoke with fakes |
-| **Retrospective** | *Add a short note per row (or per PR) when #4–#7 ship—patterns for fakes vs live, e2e skips, CLI UX.* | |
+| **Retrospective** | *Add a short note per row (or per PR) when #5–#7 ship—patterns for fakes vs live, e2e skips, CLI UX.* | |
 
 ---
 
