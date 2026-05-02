@@ -8,6 +8,10 @@ from decimal import Decimal
 from pathlib import Path
 
 from googleads_invoice.billing_url import extract_billing_url
+from googleads_invoice.addresses import (
+    DEFAULT_GMAIL_SENDER,
+    PRODUCTION_RECIPIENT_JACK,
+)
 from googleads_invoice.invoice_artifacts import (
     InvoiceOutputFields,
     build_email_body,
@@ -56,6 +60,8 @@ def format_dry_run_report(report: DryRunReport) -> str:
     """Human-readable block for stdout / logs."""
     lines = [
         "Dry run (no Gmail send, no browser)",
+        f"  From: {DEFAULT_GMAIL_SENDER}",
+        f"  To (monthly recipient): {PRODUCTION_RECIPIENT_JACK}",
         f"  Billing URL: {report.billing_url}",
         f"  Invoice date: {report.issue_date.isoformat()}",
         f"  Amount (EUR): {report.amount_eur}",

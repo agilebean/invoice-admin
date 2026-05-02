@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
-from googleads_invoice.browser_download import build_chrome_options
+from googleads_invoice.browser_download import (
+    build_chrome_options,
+    build_chrome_options_for_remote_debugging,
+)
 
 
 def test_build_chrome_options_sets_download_prefs(tmp_path: Path) -> None:
@@ -22,9 +25,21 @@ def test_build_chrome_options_user_data_dir(tmp_path: Path) -> None:
     assert any(str(profile.resolve()) in a for a in args if a.startswith("--user-data-dir="))
 
 
-def test_build_chrome_options_binary_location_passthrough(tmp_path: Path) -> None:
-    opts = build_chrome_options(
+def test_build_chrome_options_for_remote_debugging_sets_debugger_address(
+    tmp_path: Path,
+) -> None:
+    opts = build_chrome_options_for_remote_debugging(
+        debugger_address="127.0.0.1:9222",
         download_dir=tmp_path / "dl",
-        binary_location="/usr/bin/chromium",
     )
-    assert opts.binary_location == "/usr/bin/chromium"
+    assert opts.experimental_options.get("debuggerAddress") == "127.0.0.1:9222"
+    prefs = opts.experimental_options.get("prefs", {})
+    assert "download.default_directory" in prefs
+
+
+def test_build_chrome_options_for_remote_debugging_no_download_dir() -> None:
+    opts = build_chrome_options_for_remote_debugging(
+        debugger_address=" localhost:9222 ",
+    )
+    assert opts.experimental_options.get("debuggerAddress") == "localhost:9222"
+    assert "prefs" not in opts.experimental_options

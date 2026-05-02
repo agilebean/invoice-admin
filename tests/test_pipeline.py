@@ -1,8 +1,25 @@
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from googleads_invoice.pipeline import DryRunReport, run_dry_run
+from googleads_invoice.addresses import DEFAULT_GMAIL_SENDER, PRODUCTION_RECIPIENT_JACK
+from googleads_invoice.pipeline import DryRunReport, format_dry_run_report, run_dry_run
+
+
+def test_format_dry_run_report_includes_mailbox_line() -> None:
+    r = DryRunReport(
+        billing_url="https://pay.example/p",
+        issue_date=date(2026, 3, 15),
+        amount_eur=Decimal("1"),
+        renamed_filename="f.pdf",
+        email_subject="subj",
+        email_body="Hi\n",
+    )
+    s = format_dry_run_report(r)
+    assert DEFAULT_GMAIL_SENDER in s
+    assert PRODUCTION_RECIPIENT_JACK in s
 
 
 def test_run_dry_run_composes_billing_parse_and_artifacts() -> None:

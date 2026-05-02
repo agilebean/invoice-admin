@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -36,6 +37,19 @@ class GmailBackend(Protocol):
         """Send a plain-text message; return the provider message id."""
         ...
 
+    def send_text_with_pdf_attachment(
+        self,
+        *,
+        sender: str,
+        to: str,
+        subject: str,
+        body: str,
+        pdf_path: Path,
+        attachment_name: str,
+    ) -> str:
+        """Send ``body`` with one PDF attachment; return an opaque send handle / id."""
+        ...
+
 
 class GmailFacade:
     """Thin façade: stable call shape + consistent error wrapping for orchestration code."""
@@ -65,6 +79,30 @@ class GmailFacade:
                 to=to,
                 subject=subject,
                 body=body,
+            )
+        except GmailTransportError:
+            raise
+        except Exception as e:
+            raise GmailTransportError(str(e)) from e
+
+    def send_text_with_pdf_attachment(
+        self,
+        *,
+        sender: str,
+        to: str,
+        subject: str,
+        body: str,
+        pdf_path: Path,
+        attachment_name: str,
+    ) -> str:
+        try:
+            return self._backend.send_text_with_pdf_attachment(
+                sender=sender,
+                to=to,
+                subject=subject,
+                body=body,
+                pdf_path=pdf_path,
+                attachment_name=attachment_name,
             )
         except GmailTransportError:
             raise

@@ -9,7 +9,12 @@ description = "Gmail → Google Ads invoice PDF → email automation (planned sl
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-dependencies = ["pypdf>=5.0"]
+dependencies = [
+    "pypdf>=5.0",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+    "google-auth-httplib2>=0.2",
+]
 
 [project.scripts]
 googleads-invoice = "googleads_invoice.cli:main"
@@ -25,4 +30,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "e2e: headed browser download (RUN_E2E=1 locally; skipped in CI)",
+    "integration: optional live checks (e.g. GOOGLEADS_BILLING_DEEPLINK; default skip in CI)",
+    "live_brave: attach to your Brave (RUN_LIVE_BRAVE=1 + debugger + deeplink; skipped in CI)",
+    "live_spark: real Spark on macOS (RUN_LIVE_SPARK=1; skipped in CI)",
 ]

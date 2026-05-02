@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -53,4 +54,46 @@ def test_facade_does_not_double_wrap_gmail_transport_error() -> None:
     with pytest.raises(GmailTransportError, match="already"):
         facade.send_plain_text(
             sender="a@b.com", to="c@d.com", subject="s", body="b"
+        )
+
+
+def test_facade_send_text_with_pdf_attachment_delegates_to_backend(tmp_path: Path) -> None:
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"x")
+    backend = MagicMock()
+    backend.send_text_with_pdf_attachment.return_value = "sent-123"
+    facade = GmailFacade(backend)
+    mid = facade.send_text_with_pdf_attachment(
+        sender="me@gmail.com",
+        to="you@test.com",
+        subject="Subj",
+        body="Hello\n",
+        pdf_path=pdf,
+        attachment_name="invoice.pdf",
+    )
+    assert mid == "sent-123"
+    backend.send_text_with_pdf_attachment.assert_called_once_with(
+        sender="me@gmail.com",
+        to="you@test.com",
+        subject="Subj",
+        body="Hello\n",
+        pdf_path=pdf,
+        attachment_name="invoice.pdf",
+    )
+
+
+def test_facade_wraps_pdf_send_errors_as_transport_error(tmp_path: Path) -> None:
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF")
+    backend = MagicMock()
+    backend.send_text_with_pdf_attachment.side_effect = ValueError("bad")
+    facade = GmailFacade(backend)
+    with pytest.raises(GmailTransportError, match="bad"):
+        facade.send_text_with_pdf_attachment(
+            sender="a@b.com",
+            to="c@d.com",
+            subject="s",
+            body="b",
+            pdf_path=pdf,
+            attachment_name="f.pdf",
         )

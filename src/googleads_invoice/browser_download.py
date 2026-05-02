@@ -39,6 +39,49 @@ def build_chrome_options(
     return opts
 
 
+def build_chrome_options_for_remote_debugging(
+    *,
+    debugger_address: str,
+    download_dir: Path | None = None,
+) -> Options:
+    """Attach WebDriver to an **already-running** Chrome-family browser (e.g. **Brave**).
+
+    Start Brave first with a debug port, e.g. on macOS::
+
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \\
+            --remote-debugging-port=9222
+
+    Then use ``debugger_address="127.0.0.1:9222"``. Do **not** use Cursor's in-IDE browser for
+    Google Ads / billing flows — it does not share your Brave profile.
+    """
+    opts = Options()
+    opts.add_experimental_option("debuggerAddress", debugger_address.strip())
+    if download_dir is not None:
+        dl = str(download_dir.resolve())
+        prefs: dict[str, object] = {
+            "download.default_directory": dl,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True,
+            "plugins.always_open_pdf_externally": True,
+        }
+        opts.add_experimental_option("prefs", prefs)
+    return opts
+
+
+def chrome_driver_attach(
+    *,
+    debugger_address: str,
+    download_dir: Path | None = None,
+) -> webdriver.Chrome:
+    """Return a WebDriver session attached to the browser listening on ``debugger_address``."""
+    opts = build_chrome_options_for_remote_debugging(
+        debugger_address=debugger_address,
+        download_dir=download_dir,
+    )
+    return webdriver.Chrome(options=opts)
+
+
 def click_and_wait_for_pdf(
     driver: webdriver.Chrome,
     *,

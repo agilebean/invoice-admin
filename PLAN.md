@@ -134,6 +134,19 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 
 ---
 
+### Backward plan (maintainer-run slices — **implementation order 1 → 4**)
+
+See **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** for the full interview and recorded answers.
+
+| § | Step | Outcome | Notes |
+|---|------|---------|--------|
+| **10.1** | **1** | One real **Gmail SMTP** send with PDF attachment | **`googleads-invoice send-test-pdf`**; **`GOOGLEADS_GMAIL_SMTP_USER`**, **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD`** or **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE`**, **`GOOGLEADS_CONFIRM_TEST_SEND=1`**. |
+| **10.2** | **2** | **Mail.app** draft with same subject/body/attachment naming as step 1 | **`googleads-invoice mail-app-draft`**; **`GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1`**; **macOS** + Mail.app only. |
+| **10.3** | **3** | **Gmail API** search for billing notification mail | **`googleads-invoice list-billing-mail`**; **`GOOGLEADS_GMAIL_OAUTH_TOKEN`** (authorized user JSON, **`gmail.readonly`**); optional **`GOOGLEADS_GMAIL_BILLING_QUERY`**. |
+| **10.4** | **4** | **Brave** billing Documents / UI identification | **`live_brave`**, traces under **`~/Downloads`** when enabled — interview **D3**. |
+
+---
+
 ## Watch-outs
 
 - One process per Chromium `user-data-dir` → quit Brave or use a login-once automation profile.

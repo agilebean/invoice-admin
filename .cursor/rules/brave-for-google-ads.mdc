@@ -1,0 +1,16 @@
+---
+description: Google Ads billing flows require the user's Brave (WebDriver attach); never use the IDE embedded browser for session truth.
+alwaysApply: true
+---
+
+# Brave — source of truth for Google Ads / billing
+
+For **Google Ads**, **billing documents**, or any URL that depends on **the user’s logged-in session**:
+
+1. **Do not** use Cursor’s **embedded / Glass** browser to decide whether a link “works” or to capture “logged-in” state. That browser does **not** use the user’s Brave profile.
+
+2. **Do** direct automation and verification at **the user’s Brave** via Selenium **`debuggerAddress`** (Brave started with **`--remote-debugging-port`**) using **`build_chrome_options_for_remote_debugging`** / **`chrome_driver_attach`** in **`googleads_invoice.browser_download`**, documented in **`docs/REAL_WORKFLOW_AND_PREFLIGHT.md`** and **`README.md`**.
+
+3. **Never** treat “this runtime can’t see Brave” as **out of scope**: **implement** the workaround (`live_brave`, docs, **`launchd`**, future Mac runner). Track limits in **`docs/CONSTRAINTS_AND_WORKAROUNDS.md`**.
+
+4. If attach fails, troubleshoot **C3 / C5** in that doc — **ask the maintainer** only after workaround paths are documented or coded.
