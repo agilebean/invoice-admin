@@ -199,13 +199,25 @@ def live_brave_download_pdf(
             except Exception as exc:
                 diag_text = f"(diagnostic failed: {exc})"
             try:
-                # Get ALL visible text elements in the main content area
+                # Check for iframes, shadow DOMs, and actual content elements
                 tabs_text = driver.execute_script(
                     "let items = []; "
-                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox], [role=option], [role=combobox], mat-option, mat-select, td, th, tr, table, mat-row, mat-cell, [role=row], [role=gridcell], [role=columnheader]').forEach(el => {"
-                    "  let t = (el.textContent || '').trim().slice(0, 150); "
-                    "  if (t) items.push(el.tagName + '.' + (el.className || '').slice(0, 50) + ' role=' + (el.getAttribute('role') || '') + ' visible=' + el.offsetParent !== null + ':' + t);"
-                    "}); return items.slice(0, 150);"
+                    "// Check iframes\n"
+                    "items.push('IFRAMES: ' + document.querySelectorAll('iframe').length);\n"
+                    "document.querySelectorAll('iframe').forEach((f, i) => items.push('  iframe[' + i + ']: ' + (f.src || '').slice(0, 100)));\n"
+                    "// Count total elements\n"
+                    "items.push('TOTAL DOM elements: ' + document.querySelectorAll('*').length);\n"
+                    "// Get main content area - all elements under the .awsm-content container\n"
+                    "let content = document.querySelector('.awsm-content, .awsm-sub-container, .awsm-notifications-and-content, [class*=content], [class*=main]');\n"
+                    "if (content) items.push('CONTENT elements: ' + content.querySelectorAll('*').length);\n"
+                    "// Check for shadow roots\n"
+                    "let shadows = 0;\n"
+                    "document.querySelectorAll('*').forEach(el => { if (el.shadowRoot) shadows++; });\n"
+                    "items.push('Elements with shadowRoot: ' + shadows);\n"
+                    "// Get the actual innerHTML of the content area (first 2000 chars)\n"
+                    "let bodyHtml = document.body.innerHTML.slice(20000, 25000);\n"
+                    "items.push('BODY HTML [20000-25000]: ' + bodyHtml.slice(0, 1000));\n"
+                    "return items;"
                 )
                 tabs_line = "\n".join(f"  {x}" for x in (tabs_text or []))
             except Exception as exc:
