@@ -73,16 +73,19 @@ def test_run_month_happy_path(
     """Full happy path: Gmail → Brave (mocked) → parse → SMTP send."""
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
+    # Copy fixture to temp dir so run_month's shutil.move doesn't consume the original
     fixture_pdf = (
         Path(__file__).resolve().parent
         / "fixtures"
         / "pdf"
         / "invoice_eur_dot_decimal.pdf"
     )
+    pdf_copy = tmp_path / fixture_pdf.name
+    pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
         "googleads_invoice.run_month.live_brave_download_pdf",
-        return_value=fixture_pdf,
+        return_value=pdf_copy,
     ):
         report = run_month(
             gmail_read_backend=mock_gmail_backend,
@@ -97,10 +100,10 @@ def test_run_month_happy_path(
         )
 
     assert report.billing_url == "https://payments.google.com/billing/x"
-    assert report.pdf_path == fixture_pdf
+    assert report.pdf_path == pdf_copy
     assert report.issue_date == date(2026, 3, 15)
     assert report.amount_eur == Decimal("1234.56")
-    assert "Hi Jack" in report.email_body
+    assert "Dear Jack" in report.email_body
     assert report.recipient == "jack.copeland@theglugglejugfactory.com"
     assert report.send_status == "smtp:pdf:ok"
     assert len(report.steps) >= 5  # search, brave, parse, artifacts, send
@@ -114,16 +117,19 @@ def test_run_month_uses_auto_month_label(
     """When month_label is None, it's derived from the calendar."""
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
+    # Copy fixture to temp dir so run_month's shutil.move doesn't consume the original
     fixture_pdf = (
         Path(__file__).resolve().parent
         / "fixtures"
         / "pdf"
         / "invoice_eur_dot_decimal.pdf"
     )
+    pdf_copy = tmp_path / fixture_pdf.name
+    pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
         "googleads_invoice.run_month.live_brave_download_pdf",
-        return_value=fixture_pdf,
+        return_value=pdf_copy,
     ):
         report = run_month(
             gmail_read_backend=mock_gmail_backend,
@@ -238,19 +244,22 @@ def test_run_month_smtp_fails(
 ) -> None:
     download_dir = tmp_path / "downloads"
     download_dir.mkdir()
+    # Copy fixture to temp dir so run_month's shutil.move doesn't consume the original
     fixture_pdf = (
         Path(__file__).resolve().parent
         / "fixtures"
         / "pdf"
         / "invoice_eur_dot_decimal.pdf"
     )
+    pdf_copy = tmp_path / fixture_pdf.name
+    pdf_copy.write_bytes(fixture_pdf.read_bytes())
     smtp = MagicMock()
     smtp.send_text_with_pdf_attachment.side_effect = GmailTransportError("SMTP rejected")
 
     with (
         patch(
             "googleads_invoice.run_month.live_brave_download_pdf",
-            return_value=fixture_pdf,
+            return_value=pdf_copy,
         ),
         pytest.raises(RunMonthError, match="SMTP send failed"),
     ):
@@ -270,9 +279,12 @@ def test_run_month_smtp_fails(
 
 
 class TestCliRunMonth:
-    def test_refuses_without_confirm_env(self) -> None:
+    def test_refuses_without_confirm_env(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from googleads_invoice.cli import main
 
+        monkeypatch.delenv("GOOGLEADS_CONFIRM_RUN_MONTH", raising=False)
         code = main(["run-month"])
         assert code == 2
 
@@ -302,12 +314,14 @@ class TestCliRunMonth:
         code = main(["run-month"])
         assert code == 2
 
+    @patch("builtins.input", return_value="y")
     @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
     @patch("googleads_invoice.cli.run_month")
     def test_happy_path(
         self,
         mock_run_month: MagicMock,
         mock_from_env: MagicMock,
+        mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
@@ -319,6 +333,7 @@ class TestCliRunMonth:
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
+        monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
         monkeypatch.delenv("GOOGLEADS_GMAIL_BILLING_QUERY", raising=False)
         mock_from_env.return_value = MagicMock()
 
@@ -331,20 +346,22 @@ class TestCliRunMonth:
             amount_eur=Decimal("100.00"),
             renamed_filename="google-ads-invoice_2026-04-02_100-EUR.pdf",
             email_subject="Google Ads invoice — April 2026 (EUR 100.00)",
-            email_body="Hi Jack,\n\nAttached...",
+            email_body="Dear Jack,\n\nAttached...",
             recipient="jack@example.com",
             send_status="smtp:pdf:ok",
         )
 
-        code = main(["run-month", "--to", "jack@example.com"])
+        code = main(["run-month", "--test-run", "--to", "jack@example.com"])
         assert code == 0
         mock_run_month.assert_called_once()
         assert mock_run_month.call_args.kwargs["to_address"] == "jack@example.com"
 
+    @patch("builtins.input", return_value="y")
     @patch("googleads_invoice.cli.run_month")
     def test_propagates_run_month_error(
         self,
         mock_run_month: MagicMock,
+        mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from googleads_invoice.cli import main
@@ -354,16 +371,19 @@ class TestCliRunMonth:
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
+        monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
 
         mock_run_month.side_effect = RunMonthError("something broke")
 
         code = main(["run-month"])
         assert code == 2
 
+    @patch("builtins.input", return_value="y")
     @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
     def test_uses_default_recipient_when_omitted(
         self,
         mock_from_env: MagicMock,
+        mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from googleads_invoice.cli import main
@@ -374,11 +394,12 @@ class TestCliRunMonth:
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
+        monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
         monkeypatch.delenv("GOOGLEADS_INVOICE_TO", raising=False)
         mock_from_env.return_value = MagicMock()
 
         with patch("googleads_invoice.cli.run_month") as mock_run:
-            code = main(["run-month"])
+            code = main(["run-month", "--test-run"])
             assert code == 0  # exits early via mock, but that's fine
             assert mock_run.call_args.kwargs["to_address"] == DEFAULT_TEST_RECIPIENT
 

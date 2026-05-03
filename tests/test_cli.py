@@ -41,7 +41,7 @@ def test_cli_dry_run_email_month_from_billing_clock(
     code = main(["dry-run", "--mail-html", str(mail), "--invoice-pdf", str(pdf)])
     assert code == 0
     out = capsys.readouterr().out
-    assert "Hi Jack," in out
+    assert "Dear Jack," in out
     assert "April 2026" in out
 
 
@@ -170,6 +170,7 @@ def test_cli_send_test_pdf_uses_default_recipient_without_to(
     monkeypatch.setenv("GOOGLEADS_CONFIRM_TEST_SEND", "1")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "sender@gmail.com")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "fake-app-password")
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
     monkeypatch.delenv("GOOGLEADS_INVOICE_TO", raising=False)
     root = Path(__file__).resolve().parent
     pdf = root / "fixtures" / "pdf" / "invoice_eur_dot_decimal.pdf"
@@ -190,6 +191,7 @@ def test_cli_send_test_pdf_respects_invoice_to_env(
     monkeypatch.setenv("GOOGLEADS_CONFIRM_TEST_SEND", "1")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "sender@gmail.com")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
     monkeypatch.setenv(
         "GOOGLEADS_INVOICE_TO",
         "jack.copeland@theglugglejugfactory.com",
@@ -212,6 +214,7 @@ def test_cli_send_test_pdf_defaults_smtp_user_to_project_gmail(
     monkeypatch.setenv("GOOGLEADS_CONFIRM_TEST_SEND", "1")
     monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_USER", raising=False)
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "fake-app-password")
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
     root = Path(__file__).resolve().parent
     pdf = root / "fixtures" / "pdf" / "invoice_eur_dot_decimal.pdf"
     code = main(["send-test-pdf", "--to", "recipient@test.com", "--pdf", str(pdf)])
@@ -230,6 +233,7 @@ def test_cli_send_test_pdf_sends_with_mock_backend(
     monkeypatch.setenv("GOOGLEADS_CONFIRM_TEST_SEND", "1")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "sender@gmail.com")
     monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "fake-app-password")
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
     root = Path(__file__).resolve().parent
     pdf = root / "fixtures" / "pdf" / "invoice_eur_dot_decimal.pdf"
     code = main(
@@ -246,7 +250,7 @@ def test_cli_send_test_pdf_sends_with_mock_backend(
     assert call_kw["sender"] == "sender@gmail.com"
     assert call_kw["to"] == "recipient@test.com"
     assert call_kw["pdf_path"] == pdf
-    assert "Jack" in call_kw["body"] or "Hi Jack" in call_kw["body"]
+    assert "Dear Jack" in call_kw["body"]
 
 
 @patch("googleads_invoice.cli.SmtpGmailBackend")

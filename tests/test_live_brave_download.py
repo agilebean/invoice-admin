@@ -269,6 +269,10 @@ class TestLiveBraveDownloadPdf:
         mock_driver = MagicMock()
         mock_driver.current_url = "https://ads.google.com/aw/billing/documents"
         mock_driver.page_source = "<html/>"
+        mock_driver.find_elements.return_value = []
+        # Return a string with "Download" so the 15s innerText wait passes immediately,
+        # then return None for the JS fallback in _find_download_on_documents_page
+        mock_driver.execute_script.side_effect = ["Page has Download here", None]
 
         with (
             patch(

@@ -79,6 +79,8 @@ def test_facade_send_text_with_pdf_attachment_delegates_to_backend(tmp_path: Pat
         body="Hello\n",
         pdf_path=pdf,
         attachment_name="invoice.pdf",
+        cc=None,
+        bcc=None,
     )
 
 

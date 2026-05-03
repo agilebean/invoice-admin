@@ -385,7 +385,6 @@ def main(argv: list[str] | None = None) -> int:
         smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
 
         if not args.test_run:
-            from googleads_invoice.billing_period import billing_month_label_for_previous_calendar_month
             from googleads_invoice.addresses import CC_RECIPIENTS
             month_str = billing_month_label_for_previous_calendar_month()
             print(

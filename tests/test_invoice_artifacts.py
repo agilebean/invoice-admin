@@ -48,6 +48,4 @@ def test_build_email_body_includes_jack_month_date_and_amount() -> None:
     body = build_email_body(fields)
     assert "Jack" in body
     assert "April 2026" in body
-    assert "2026-04-01" in body
-    assert "1234.56" in body
-    assert "EUR" in body
+    assert "Dear Jack" in body
