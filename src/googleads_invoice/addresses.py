@@ -22,7 +22,7 @@ CC_RECIPIENTS = [
 
 # BCC recipient for the production send (Evernote archive).
 BCC_RECIPIENTS = [
-    "Chaehan Evernote <chaehan_so.1a53560@m.evernote.com>",
+    "chaehan.so@gmail.com",
 ]
 
 # Dropbox folder to move the downloaded invoice PDF into.
