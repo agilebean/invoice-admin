@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import time
+from decimal import Decimal
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
@@ -32,10 +33,20 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from googleads_invoice.browser_download import chrome_driver_attach
 from googleads_invoice.live_brave_trace import save_live_brave_trace
+from googleads_invoice.billing_period import billing_month_label_for_previous_calendar_month
+from googleads_invoice.invoice_pdf import parse_invoice_pdf
+from googleads_invoice.invoice_artifacts import InvoiceOutputFields, build_renamed_pdf_filename
 
 
 class LiveBraveDownloadError(RuntimeError):
     """Raised when the Brave download flow fails (navigation, click, or timeout)."""
+
+
+def _build_download_filename(fields: InvoiceOutputFields) -> str:
+    """Build filename like \"2026-04-30 GoogleAds €6,496.76.pdf\"."""
+    d = fields.issue_date.isoformat()
+    amt = format(fields.amount_eur.quantize(Decimal("0.01")), "f")
+    return f"{d} GoogleAds €{amt}.pdf"
 
 
 def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
@@ -126,6 +137,13 @@ def live_brave_download_pdf(
     LiveBraveDownloadError
         If navigation, element finding, or download times out.
     """
+    _t0 = time.monotonic()
+    _STEP = 6
+    def _step(n: int, msg: str) -> None:
+        elapsed = time.monotonic() - _t0
+        print(f"  [{n}/{_STEP}] {elapsed:.0f}s {msg}", flush=True)
+
+    _step(1, "Attaching to Brave...")
     download_dir = download_dir.expanduser().resolve()
     download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -134,14 +152,7 @@ def live_brave_download_pdf(
         download_dir=download_dir,
     )
 
-    # Tell Chrome/Brave to auto-download files without showing the confirmation dialog
-    try:
-        driver.execute_cdp_cmd("Page.setDownloadBehavior", {
-            "behavior": "allow",
-            "downloadPath": str(download_dir),
-        })
-    except Exception:
-        pass  # CDP not available; downloads will show a dialog
+    _step(2, "Navigating to billing documents...")
     try:
         driver.get(deeplink_url)
         # Switch to the newest tab if one appeared (c.gle redirects may open new tab)
@@ -173,6 +184,7 @@ def live_brave_download_pdf(
                 f"Tab URLs: {all_urls}"
             ) from exc
 
+        _step(3, "Switching to document iframe and locating Download...")
         # The billing documents table is inside an iframe from payments.google.com
         # Switch to it so we can find and click Download links
         try:
@@ -261,82 +273,85 @@ def live_brave_download_pdf(
                 f"Rendered text snippets (first 100):\n{diag_text}"
             )
 
+        _step(4, "Clicking Download...")
         download_el.click()
 
-        # The Download link opens a new tab with the document URL.
-        # Use JavaScript fetch() to download the PDF bytes from within the browser,
-        # bypassing the browser's native download dialog entirely.
-        new_tab_url: str | None = None
+        # Switch back to main page context to detect new tab and downloads
+        driver.switch_to.default_content()
+
+        # The Download link opens a new tab with the document download URL.
+        # Chrome DevTools Protocol tells Brave to auto-download without dialog.
+        import time as _time
+        _time.sleep(3)
+
+        # Wait for a new tab to open
         try:
             current_handles = set(driver.window_handles)
             WebDriverWait(driver, 10).until(
                 lambda d: len(set(d.window_handles) - current_handles) > 0
             )
-            new_handles = list(set(driver.window_handles) - current_handles)
-            if new_handles:
-                driver.switch_to.window(new_handles[0])
-                new_tab_url = driver.current_url
         except Exception:
-            pass  # No new tab opened
+            pass
 
-        if new_tab_url:
-            # Fetch the PDF bytes via JavaScript (same browser context = same cookies)
-            import base64 as _b64
-            result = driver.execute_script(
-                """
-                return fetch(arguments[0], {credentials: 'include'})
-                    .then(function(r) {
-                        if (!r.ok) throw new Error('HTTP ' + r.status);
-                        return r.blob();
-                    })
-                    .then(function(blob) {
-                        return new Promise(function(resolve, reject) {
-                            var reader = new FileReader();
-                            reader.onload = function() { resolve(reader.result); };
-                            reader.onerror = function() { reject('FileReader error'); };
-                            reader.readAsDataURL(blob);
-                        });
-                    });
-                """,
-                new_tab_url,
-            )
-            if result and ',' in str(result):
-                raw = _b64.b64decode(str(result).split(',', 1)[1])
-                safe_name = f"googleads_invoice_{int(time.time())}.pdf"
-                out_path = (download_dir / safe_name).resolve()
-                out_path.write_bytes(raw)
-                return out_path
+        _step(5, "Waiting for PDF download...")
+        deadline = _time.monotonic() + download_timeout_s
+        start_mtime = _time.monotonic() - 5
 
-        # Fallback: poll for new PDFs
-        deadline = time.monotonic() + download_timeout_s
-        start_mtime = time.monotonic() - 5
-
-        while time.monotonic() < deadline:
+        pdf_path: Path | None = None
+        while _time.monotonic() < deadline:
             for p in download_dir.iterdir():
-                if p.suffix.lower() == ".pdf":
+                if p.suffix.lower() == ".pdf" and p.stat().st_size > 0:
                     try:
                         mtime = p.stat().st_mtime
                     except OSError:
                         continue
-                    if mtime > start_mtime and p.stat().st_size > 0:
-                        return p.resolve()
-            time.sleep(0.3)
+                    if mtime > start_mtime:
+                        pdf_path = p.resolve()
+                        break
+            if pdf_path:
+                break
+            _time.sleep(0.3)
 
-        recent = sorted(
-            [p for p in download_dir.iterdir() if p.suffix.lower() == ".pdf"],
-            key=lambda p: p.stat().st_mtime, reverse=True
-        )[:5]
-        recent_info = "\n  ".join(
-            f"{p.name} (modified {p.stat().st_mtime:.0f}, {p.stat().st_size} bytes)"
-            for p in recent
+        if pdf_path is None:
+            recent = sorted(
+                [p for p in download_dir.iterdir() if p.suffix.lower() == ".pdf"],
+                key=lambda p: p.stat().st_mtime, reverse=True
+            )[:5]
+            recent_info = "\n  ".join(
+                f"{p.name} (modified {p.stat().st_mtime:.0f}, {p.stat().st_size} bytes)"
+                for p in recent
+            )
+            trace_paths = save_live_brave_trace(driver, label="billing_download_timeout")
+            raise LiveBraveDownloadError(
+                f"Clicked Download but no new PDF appeared in {download_dir} within "
+                f"{download_timeout_s}s.\n"
+                f"Existing PDFs in {download_dir}:\n  {recent_info}\n"
+                f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
+            )
+
+        _step(5, f"Parsing {pdf_path.name} ({pdf_path.stat().st_size} bytes)...")
+        issue_date, amount_eur = parse_invoice_pdf(pdf_path)
+        month_label = billing_month_label_for_previous_calendar_month()
+        fields = InvoiceOutputFields(
+            issue_date=issue_date,
+            amount_eur=amount_eur,
+            month_label=month_label,
         )
 
-        trace_paths = save_live_brave_trace(driver, label="billing_download_timeout")
-        raise LiveBraveDownloadError(
-            f"Clicked Download but no new PDF appeared in {download_dir} within "
-            f"{download_timeout_s}s.\n"
-            f"Existing PDFs in {download_dir}:\n  {recent_info}\n"
-            f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
-        )
+        _step(6, f"Renaming to final filename...")
+        final_name = _build_download_filename(fields)
+        out_path = (download_dir / final_name).resolve()
+        if out_path.is_file():
+            stem = out_path.stem
+            ext = out_path.suffix
+            for i in range(1, 100):
+                alt = download_dir / f"{stem} ({i}){ext}"
+                if not alt.is_file():
+                    out_path = alt
+                    break
+        pdf_path.rename(out_path)
+        _tot = _time.monotonic() - _t0
+        print(f"  Done: {out_path.name} ({_tot:.0f}s total)", flush=True)
+        return out_path
     finally:
         driver.quit()
