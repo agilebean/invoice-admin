@@ -68,6 +68,8 @@ Captured from the structured interview in Cursor; use this as the working defaul
 | **Brave / trace artifacts**             | Prefer `~/Downloads` for saved HTML/screenshots when tracing — **not** `./artifacts/` by default.                                                                                                                                             |
 | **Jack / production guard**             | **No** separate env gate for Jack’s address beyond what `send-test-pdf` already requires `GOOGLEADS_CONFIRM_TEST_SEND=1`; treat recipient choice as manual discipline.                                                                        |
 | **Canonical addresses**                 | **From:** `chaehan.so@gmail.com` (default SMTP user if unset). **Default To** when `--to` omitted: `chaehan.so@virtualfriend.chat`, overridable with `GOOGLEADS_INVOICE_TO` (e.g. `jack.copeland@theglugglejugfactory.com` for monthly send). |
+| **Gmail OAuth app name**               | `chaehan-gmail-access` (Google Cloud Console OAuth client; reusable for other personal Gmail scripts). |
+| **App password file path**             | `~/.gmail/gmail-smtp-app-password` (SMTP app password in the same `.gmail` directory as the OAuth token). |
 
 
 ---

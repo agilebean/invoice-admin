@@ -23,7 +23,11 @@ class _AnchorHrefCollector(HTMLParser):
                 self.hrefs.append(value.strip())
 
 
-_BILLING_NETLOCS = frozenset({"payments.google.com", "pay.google.com"})
+_BILLING_NETLOCS = frozenset({
+    "payments.google.com",
+    "pay.google.com",
+    "c.gle",  # Google short links that redirect to the billing Documents page
+})
 
 
 def _is_billing_href(href: str) -> bool:

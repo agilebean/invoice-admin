@@ -25,6 +25,13 @@ def test_extract_billing_url_missing_raises_clear_error() -> None:
     assert "billing" in msg or "invoice" in msg or "url" in msg
 
 
+def test_extract_billing_url_cgle_short_link() -> None:
+    """Google Ads emails use c.gle short links instead of direct payments.google.com URLs."""
+    html = _load_fixture("billing_mail_cgle.html")
+    url = extract_billing_url(html)
+    assert url.startswith("https://c.gle/")
+
+
 def test_extract_billing_url_only_non_google_links_raises() -> None:
     html = _load_fixture("billing_mail_only_non_google_links.html")
     with pytest.raises(BillingUrlNotFoundError):
