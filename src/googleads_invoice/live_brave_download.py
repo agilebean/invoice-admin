@@ -260,6 +260,7 @@ def live_brave_download_pdf(
         driver.switch_to.default_content()
 
         # The Download link opens a new tab with the document URL.
+        new_tab_url: str | None = None
         try:
             current_handles = set(driver.window_handles)
             WebDriverWait(driver, 10).until(
@@ -268,11 +269,41 @@ def live_brave_download_pdf(
             new_handles = list(set(driver.window_handles) - current_handles)
             if new_handles:
                 driver.switch_to.window(new_handles[0])
-                # Wait a moment for the page to start the download
-                time.sleep(3)
+                new_tab_url = driver.current_url
+                time.sleep(2)
         except Exception:
-            pass  # No new tab opened, or download started directly
+            pass  # No new tab opened
 
+        if new_tab_url:
+            # Download the PDF via the browser's own fetch (bypasses download dialog)
+            import json as _json
+            pdf_bytes = driver.execute_script(
+                """
+                return fetch(arguments[0], {credentials: 'include'})
+                    .then(r => {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.blob();
+                    })
+                    .then(blob => new Promise((resolve, reject) => {
+                        let reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject('FileReader error');
+                        reader.readAsDataURL(blob);
+                    }));
+                """,
+                new_tab_url,
+            )
+            # Decode the base64 data URL to raw bytes
+            if pdf_bytes and ',' in pdf_bytes:
+                import base64 as _b64
+                raw = _b64.b64decode(pdf_bytes.split(',', 1)[1])
+                # Extract filename from Content-Disposition or use a default
+                pdf_name = f"googleads_invoice_{int(time.time())}.pdf"
+                out_path = (download_dir / pdf_name).resolve()
+                out_path.write_bytes(raw)
+                return out_path
+
+        # Fallback: wait for a PDF to appear in the download directory
         deadline = time.monotonic() + download_timeout_s
         while time.monotonic() < deadline:
             after = {p.resolve() for p in download_dir.glob("*.pdf")}
