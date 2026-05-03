@@ -1,132 +1,55 @@
 # googleads-invoice-glugglejug
 
-Skeleton repository for Gmail → billed Google Ads UI (headed Brave/Chromium) → PDF handling → emailing **[jack.copeland@theglugglejugfactory.com](mailto:jack.copeland@theglugglejugfactory.com)** from **`chaehan.so@gmail.com`**.
+Automates: Gmail billing email → Brave PDF download → parse → email to Jack + Sophie/Rudi → Dropbox.
 
-Iteration 1 adds a **`src/`** package layout and **pytest** baseline; further slices (Gmail, Selenium, PDF, CLI) live in **[`PLAN.md`](PLAN.md)**.
-
-**Real Mac workflow + manual preflight (Spark, Brave, Dropbox):** **[`docs/REAL_WORKFLOW_AND_PREFLIGHT.md`](docs/REAL_WORKFLOW_AND_PREFLIGHT.md)**.  
-**Monthly flow (steps 1 → 4):** **[`docs/BACKWARD_PLAN_AND_INTERVIEW.md`](docs/BACKWARD_PLAN_AND_INTERVIEW.md)**.  
-**Constraints & workarounds (why CI ≠ Brave, how we still ship real integration):** **[`docs/CONSTRAINTS_AND_WORKAROUNDS.md`](docs/CONSTRAINTS_AND_WORKAROUNDS.md)**.  
-**Fixtures:** small sample HTML/PDF files **in git** under `tests/fixtures/` so CI can test parsers—they are **not** your live invoices (explained in that doc).
-
-**Delivery:** Only **`PLAN.md`** iterations—strict TDD (**failing test → minimal pass → refactor**); no new behavior without a red **`pytest`** first.  
-**Merge bar:** fast suite green in CI; headed browser / live mail only where **`PLAN`** and **`pytest` markers** allow.
-
-## Development
-
-Requires **Python 3.12+**. **Use [mamba](https://mamba.readthedocs.io/)** (conda-forge); do **not** use a project-local **`python -m venv`**.
-
-### mamba environment
-
-From the repo root:
+## Setup
 
 ```bash
-mamba env create -f environment.yml   # first time
-# or refresh after editing environment.yml:
-mamba env update -f environment.yml --prune
-
+mamba env create -f environment.yml
 mamba activate googleads-invoice-glugglejug
-pip install -e ".[dev]"
-pytest
+pip install -e ".[dev,oauth]"
 ```
 
-Python packaging dependencies stay in **`pyproject.toml`**; **`environment.yml`** only pins the **Python + pip** base from conda-forge.
+**Credentials (one-time, stored in `~/.gmail/`):**
 
-### Daily use (bash)
+| What | How | Env var |
+|------|-----|---------|
+| Gmail API token (read-only) | `python scripts/get_gmail_token.py` | `GOOGLEADS_GMAIL_OAUTH_TOKEN` |
+| SMTP app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → save to `~/.gmail/gmail-smtp-app-password` | `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` |
 
-**`gig`** = same pattern as **`swim`**: **`export gig=<this-repo>`** and **`alias gig='mamba activate googleads-invoice-glugglejug && cd "$gig"'`** in **`~/.bash_aliases`**—no separate **`.bash`** file.
-The **`export`** is **`cd`**’s path; single-quoted **`alias`** so **`"$gig"`** expands when you **run** **`gig`**, not when the alias is defined. **macOS:** load **`~/.bash_aliases`** from **`~/.bash_profile`** (see **`~/.cursor/rules/shell-bash-aliases.mdc`**).
+## CLI
+
+```
+googleads-invoice
+  run-month              Full flow: Gmail → Brave download → parse → email → Dropbox
+  run-month --test-run   Same but sends to test inbox, no CC/BCC
+  dry-run                Print fields from local files (no network)
+  billing-url-from-gmail Print billing URL from latest Gmail notification
+  list-billing-mail      List matching Gmail messages
+  live-brave-download    Download PDF from Brave billing page
+  send-test-pdf          Send one test PDF via SMTP
+  mail-app-draft         Open Mail.app draft (macOS)
+```
+
+### Quick start
 
 ```bash
-export gig=/path/to/googleads-invoice-glugglejug
-alias gig='mamba activate googleads-invoice-glugglejug && cd "$gig"'
-```
-CI runs **GitHub Actions** **`setup-python`** + **`pip install -e ".[dev]"`** + **`pytest`** (see `.github/workflows/ci.yml`). **`@pytest.mark.e2e`** browser tests are **skipped in CI** and **skipped locally** unless you set **`RUN_E2E=1`**.
+# Set env vars once per terminal:
+export GOOGLEADS_GMAIL_OAUTH_TOKEN="$HOME/.gmail/gmail_readonly_token.json"
+export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail/gmail-smtp-app-password"
+export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 
-### CLI (`dry-run`)
-
-After **one-time** **`pip install -e ".[dev]"`** in the active mamba env, print **billing URL**, **parsed PDF fields**, and **email/filename** artifacts (no browser, no Gmail). **Jack’s email copy** uses the **billing month** = **full calendar month before “today”** on your Mac (`billing_month_label_for_previous_calendar_month` in code). There is **no** `--month-label`—month and year are not retyped.
-
-**Regression / quick check** (fixtures in repo):
-
-```bash
-googleads-invoice dry-run \
-  --mail-html tests/fixtures/gmail/billing_mail_happy.html \
-  --invoice-pdf tests/fixtures/pdf/invoice_eur_dot_decimal.pdf
+# Test run (sends to your test inbox, no CC):
+GOOGLEADS_CONFIRM_RUN_MONTH=1 \
+  GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222 \
+  googleads-invoice run-month --test-run
 ```
 
-**Monthly run (real workflow):** **`tests/fixtures`** are for CI only. Export billing **HTML** from **Spark** and save the **PDF** from **Brave**, then point **`dry-run`** at those files:
+For production, Brave must be running with `--remote-debugging-port=9222` (or use launchd — see below).
 
-```bash
-export GOOGLEADS_INVOICE_MAIL_HTML="$HOME/path/from/spark/export.html"
-export GOOGLEADS_INVOICE_PDF="$HOME/path/from/brave/invoice.pdf"
-googleads-invoice dry-run
-```
+## Monthly scheduling (launchd)
 
-Or pass **`--mail-html`** / **`--invoice-pdf`** instead of env vars. **Spark / Brave** are not automated here—you export/save manually, then run the CLI.
-
-Equivalent: **`python -m googleads_invoice dry-run ...`** (works whenever the package is installed).
-
-### Send test PDF (**Gmail SMTP**, Step 1)
-
-Sends **one** message from **`GOOGLEADS_GMAIL_SMTP_USER`** with **`tests/fixtures/pdf/invoice_eur_dot_decimal.pdf`** (or **`--pdf`**) attached. Subject/body match **`build_email_subject` / `build_email_body`** and the **billing month** rule (same as production copy). **Requires** a Gmail **App password**, not your normal login password.
-
-**Guardrail:** set **`GOOGLEADS_CONFIRM_TEST_SEND=1`** or the CLI exits **2**.
-
-**Credential:** set **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD`** *or* (**preferred**) **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE`** pointing to a local file whose **first line** is the app password — use **`chmod 600`** on that file and never commit it.
-
-```bash
-export GOOGLEADS_CONFIRM_TEST_SEND=1
-# Sender defaults to chaehan.so@gmail.com if GOOGLEADS_GMAIL_SMTP_USER is unset.
-export GOOGLEADS_GMAIL_SMTP_USER='chaehan.so@gmail.com'
-export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD='xxxx xxxx xxxx xxxx'
-# or: export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail-app-password"
-# Recipient: omit --to to use chaehan.so@virtualfriend.chat, or set:
-# export GOOGLEADS_INVOICE_TO='chaehan.so@virtualfriend.chat'
-# For the monthly Jack send: export GOOGLEADS_INVOICE_TO='jack.copeland@theglugglejugfactory.com'
-googleads-invoice send-test-pdf
-# optional: --to overrides env; --pdf /path/to/other.pdf  --attachment-name custom.pdf
-```
-
-### Mail.app draft (Step 2 — macOS)
-
-Opens **Mail.app** with a **new outgoing message**: same **subject**, **body**, and **attachment filename** rules as **`send-test-pdf`** (production copy + **`build_renamed_pdf_filename`**). You click **Send** in Mail—or duplicate the draft into **Spark**. **Requires macOS** (`osascript` + Mail).
-
-**Guardrail:** **`GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1`**.
-
-```bash
-export GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1
-googleads-invoice mail-app-draft
-# Same defaults as send-test-pdf for --to / GOOGLEADS_INVOICE_TO; optional: --pdf …
-```
-
-### List billing mail (**Gmail API**, Step 3 — READ-ONLY)
-
-Lists recent messages matching the billing-notification search (default **`q=`** matches **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** / **`GOOGLEADS_GMAIL_BILLING_QUERY`**). Uses **Gmail API** with an OAuth **authorized-user JSON** file — same **`token.json`** style other Google CLI tools write after consent (**`gmail.readonly`** scope). **Does not send mail**; sending stays on **SMTP** (`send-test-pdf`).
-
-```bash
-export GOOGLEADS_GMAIL_OAUTH_TOKEN="$HOME/path/to/your-token.json"
-googleads-invoice list-billing-mail
-# optional: --query 'from:payments-noreply@google.com ...'  --max-results 5
-```
-
-### Billing URL from Gmail (**Gmail API**, Step 3 — READ-ONLY)
-
-Scans the same search as **`list-billing-mail`**, downloads **`text/html`** for each hit (up to **`--max-scan`**), and prints the first URL that passes **`extract_billing_url`** ( **`payments.google.com`** / **`pay.google.com`** ). Use stdout as input elsewhere (e.g. paste into **`GOOGLEADS_BILLING_DEEPLINK`** for **`live_brave`**).
-
-```bash
-export GOOGLEADS_GMAIL_OAUTH_TOKEN="$HOME/path/to/your-token.json"
-googleads-invoice billing-url-from-gmail
-# optional: --max-scan 10  --query 'from:payments-noreply@google.com ...'
-```
-
-**Step 4** (Brave Documents / `live_brave`) is tracked in **PLAN §10.4** and **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`**.
-
-**`googleads-invoice: command not found`:** run **`mamba activate googleads-invoice-glugglejug`**, then **`pip install -e ".[dev]"`** again if entry points changed. The script is under **`$CONDA_PREFIX/bin/googleads-invoice`** on Unix; you can call **`python -m googleads_invoice ...`** if **`PATH`** is wrong.
-
-### Monthly scheduling (launchd)
-
-Automatically runs `run-month` on the 2nd at 05:00 (Brave starts/stops automatically):
+Runs automatically on the 2nd at 05:00 (starts and stops Brave):
 
 ```bash
 mkdir -p ~/.gmail/logs
@@ -134,77 +57,25 @@ ln -sf ~/Software/Prototypes/googleads-invoice-glugglejug/scripts/com.googleads-
 launchctl load ~/Library/LaunchAgents/com.googleads-invoice.monthly.plist
 ```
 
-Logs at `~/.gmail/logs/`. Test with `launchctl start com.googleads-invoice.monthly`. Unload to stop.
+Logs: `~/.gmail/logs/`. Test: `launchctl start com.googleads-invoice.monthly`.
 
-### Browser / e2e (optional, local)
-
-**Google Ads / billing pages:** use **your Brave** (logged-in profile). **Do not** rely on Cursor’s embedded browser for those URLs.
-
-- **Attach Selenium to running Brave:** start Brave with remote debugging, then use **`build_chrome_options_for_remote_debugging`** / **`chrome_driver_attach`** from **`googleads_invoice.browser_download`** (see **`docs/REAL_WORKFLOW_AND_PREFLIGHT.md`**).
-- **Typical macOS one-liner** (then leave Brave open):
+## Tests
 
 ```bash
-"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" --remote-debugging-port=9222
+pytest        # 105 pass, 5 skipped (e2e/live markers)
 ```
 
-- **Env:** **`GOOGLEADS_BROWSER_DEBUGGER_ADDRESS`** (e.g. `127.0.0.1:9222`) in **`.env.example`**.
+## Docs
 
-**Smoke e2e** ( **`RUN_E2E=1 pytest -m e2e`** ) still uses a **fresh** Chrome instance + `file://` fixture by design; that is **not** a substitute for Brave attach on real Ads URLs.
-
-```bash
-RUN_E2E=1 pytest -m e2e
-# or headless (fixture smoke only):
-HEADLESS_E2E=1 RUN_E2E=1 pytest -m e2e
-```
-
-**Manual fallback:** open billing in **Brave**, download, then **`googleads-invoice dry-run --invoice-pdf ...`**.
-
-**Live pytest — real Brave + real Spark (your Mac only, never CI)**
-
-1. Start Brave with **`--remote-debugging-port=9222`**, export the monthly deeplink and debugger address, then:
-
-```bash
-export RUN_LIVE_BRAVE=1
-# optional: save page HTML + screenshot after navigation (default dir: ~/Downloads)
-# export RUN_LIVE_BRAVE_TRACE=1
-# export GOOGLEADS_LIVE_BRAVE_TRACE_DIR="$HOME/Downloads"
-export GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222
-export GOOGLEADS_BILLING_DEEPLINK='https://c.gle/...'   # from mail; do not commit
-pytest -m live_brave tests/test_live_brave_billing.py -q
-```
-
-Attaches Selenium to **your** Brave and opens the deeplink in the **current tab** (use a spare tab if needed).
-
-2. **Spark** (macOS): AppleScript checks Spark is installed; optionally point at exported mail HTML:
-
-```bash
-export RUN_LIVE_SPARK=1
-export GOOGLEADS_SPARK_MAIL_HTML="$HOME/path/billing_export.html"   # optional; second test skips if unset
-pytest -m live_spark tests/test_live_spark.py -q
-```
-
-Spark has **no** stable automation API in this repo — export the message to HTML yourself, then the test runs **`extract_billing_url`** on disk.
-
-**Remote:** [`https://github.com/SoHu-Labs/googleads-invoice-glugglejug.git`](https://github.com/SoHu-Labs/googleads-invoice-glugglejug.git)
+- [`PLAN.md`](PLAN.md) — backlog, status, pre-flight ritual
+- [`docs/`](docs/) — real workflow, constraints, interview
 
 ## Contents
 
 | Item | Purpose |
 |------|---------|
-| `README.md` | Repo overview + local/CI run instructions |
-| `docs/REAL_WORKFLOW_AND_PREFLIGHT.md` | Plain vocabulary, Brave/Dropbox flow, manual preflight, screenshot |
-| `docs/BACKWARD_PLAN_AND_INTERVIEW.md` | Backward plan 4→1 + interview prompts for Spark/Gmail/Brave |
-| `docs/CONSTRAINTS_AND_WORKAROUNDS.md` | Agile table: runtime limits → workarounds → tests |
-| `.env.example` | Template for `GOOGLEADS_*` and live-test toggles (copy to `.env`, gitignored) |
-| `environment.yml` | **mamba** env (Python 3.12 + pip); app deps via **`pip install -e ".[dev]"`** |
-| `PLAN.md` | Goal, backlog, agile iterations, strict TDD + regression posture |
-| `pyproject.toml` | Package + pytest config |
 | `src/googleads_invoice/` | Application package |
 | `tests/` | Fast pytest suite |
-| `.github/workflows/ci.yml` | GitHub Actions — pytest |
-| `LICENSE` | MIT (SoHu-Labs, 2026) |
-| `.gitignore` | Python / env / tooling cruft |
-
-## License
-
-[MIT License](LICENSE) — Copyright (c) 2026 SoHu-Labs.
+| `scripts/` | OAuth bootstrapper, launchd plist, wrapper script |
+| `docs/` | Workflow docs, constraints, interview |
+| `PLAN.md` | Backlog and status |
