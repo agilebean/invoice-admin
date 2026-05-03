@@ -6,6 +6,7 @@ This is the "one command" caller for the month-end workflow. Each real I/O bound
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -32,6 +33,11 @@ from googleads_invoice.live_brave_download import (
     LiveBraveDownloadError,
     live_brave_download_pdf,
 )
+from googleads_invoice.addresses import (
+    CC_RECIPIENTS,
+    BCC_RECIPIENTS,
+    DROPBOX_INVOICE_DIR,
+)
 
 
 class RunMonthError(RuntimeError):
@@ -51,6 +57,7 @@ class RunMonthReport:
     email_body: str
     recipient: str
     send_status: str
+    dropbox_path: Path | None = None
     steps: list[str] = field(default_factory=list)
 
 
@@ -69,19 +76,27 @@ def run_month(
     smtp_backend: SmtpGmailBackend,
     smtp_sender: str,
     to_address: str,
+    test_run: bool = False,
     # Month label (None = auto from previous calendar month)
     month_label: str | None = None,
 ) -> RunMonthReport:
-    """Run the full monthly invoice flow: Gmail → Brave download → parse → SMTP send.
+    """Run the full monthly invoice flow: Gmail → Brave download → parse → SMTP send."""
+    _t0 = time.monotonic()
+    _last_t = [_t0]
+    _STEP = 7
 
-    Returns a :class:`RunMonthReport` with all fields populated. Raises
-    :exc:`RunMonthError` if any step fails irrecoverably.
-    """
+    def _step(n: int, msg: str) -> None:
+        now = time.monotonic()
+        step_dur = now - _last_t[0]
+        total = now - _t0
+        _last_t[0] = now
+        print(f"  [{n}/{_STEP}] +{step_dur:.1f}s/{total:.1f}s {msg}", flush=True)
+
     steps: list[str] = []
 
     # 1. Gmail search → billing URL
     label = month_label or billing_month_label_for_previous_calendar_month()
-    steps.append("Searching Gmail for billing notification...")
+    _step(1, "Searching Gmail for billing notification...")
     try:
         rows = gmail_read_backend.list_messages(
             billing_query, max_results=max_scan
@@ -94,6 +109,7 @@ def run_month(
             f"(tried {max_scan} max). Check the query or your OAuth token."
         )
 
+    _step(2, "Extracting billing URL from Gmail...")
     billing_url: str | None = None
     for r in rows:
         try:
@@ -107,11 +123,11 @@ def run_month(
     if billing_url is None:
         raise RunMonthError(
             f"Scanned {len(rows)} billing messages but found no extractable "
-            f"billing URL (expected a payments.google.com or pay.google.com link)."
+            f"billing URL."
         )
 
     # 2. Brave download → PDF
-    steps.append("Launching Brave to download invoice PDF...")
+    _step(3, "Launching Brave to download invoice PDF...")
     try:
         pdf_path = live_brave_download_pdf(
             debugger_address=debugger_address,
@@ -119,53 +135,80 @@ def run_month(
             download_dir=download_dir,
             navigation_timeout_s=navigation_timeout_s,
             download_timeout_s=download_timeout_s,
+            verbose=False,
         )
     except LiveBraveDownloadError as e:
         raise RunMonthError(str(e)) from e
     steps.append(f"PDF downloaded: {pdf_path}")
 
     # 3. Parse PDF → date + EUR
-    steps.append("Parsing invoice PDF...")
+    _step(4, "Parsing invoice PDF...")
     try:
         issue_date, amount_eur = parse_invoice_pdf(pdf_path)
     except InvoicePdfError as e:
         raise RunMonthError(f"Failed to parse invoice PDF: {e}") from e
-    steps.append(
-        f"Invoice: {issue_date.isoformat()}, EUR {amount_eur}"
-    )
+    steps.append(f"Invoice: {issue_date.isoformat()}, EUR {amount_eur}")
 
     # 4. Build artifacts
+    _step(5, "Building email artifacts...")
     fields = InvoiceOutputFields(
         issue_date=issue_date,
         amount_eur=amount_eur,
         month_label=label,
     )
-    renamed = build_renamed_pdf_filename(fields)
+    # Use the actual saved filename as the attachment name
+    attach_name = pdf_path.name
     subject = build_email_subject(fields)
     body = build_email_body(fields)
-    steps.append(f"Artifacts built: filename={renamed}, subject={subject!r}")
+    steps.append(f"Artifacts built: attachment={attach_name}")
 
     # 5. SMTP send
-    steps.append(f"Sending email to {to_address}...")
+    cc_list = None if test_run else CC_RECIPIENTS
+    bcc_list = None if test_run else BCC_RECIPIENTS
+    _step(6, f"Sending email to {to_address}...")
     try:
         status = smtp_backend.send_text_with_pdf_attachment(
             sender=smtp_sender,
             to=to_address,
+            cc=cc_list,
+            bcc=bcc_list,
             subject=subject,
             body=body,
             pdf_path=pdf_path,
-            attachment_name=renamed,
+            attachment_name=attach_name,
         )
     except GmailTransportError as e:
         raise RunMonthError(f"SMTP send failed: {e}") from e
     steps.append(f"Email sent (status: {status})")
 
+    _step(7, "Moving file to Dropbox...")
+    dropbox_dir = Path(DROPBOX_INVOICE_DIR).expanduser()
+    dropbox_dir.mkdir(parents=True, exist_ok=True)
+    dest = dropbox_dir / pdf_path.name
+    if dest.is_file():
+        stem = dest.stem
+        ext = dest.suffix
+        for i in range(1, 100):
+            alt = dropbox_dir / f"{stem} ({i}){ext}"
+            if not alt.is_file():
+                dest = alt
+                break
+    import shutil
+    shutil.move(str(pdf_path), str(dest))
+    if not dest.is_file():
+        raise RunMonthError(f"File move failed: {pdf_path} -> {dest}")
+    steps.append(f"Moved to Dropbox: {dest}")
+
+    _tot = time.monotonic() - _t0
+    print(f"  Done ({_tot:.1f}s total)", flush=True)
+
     return RunMonthReport(
         billing_url=billing_url,
         pdf_path=pdf_path,
+        dropbox_path=dest,
         issue_date=issue_date,
         amount_eur=amount_eur,
-        renamed_filename=renamed,
+        renamed_filename=attach_name,
         email_subject=subject,
         email_body=body,
         recipient=to_address,

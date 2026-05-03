@@ -121,21 +121,31 @@ class TestLiveBraveDownloadPdf:
         download_dir = tmp_path / "downloads"
         download_dir.mkdir()
 
+        fixture_pdf = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "pdf"
+            / "invoice_eur_dot_decimal.pdf"
+        )
+
         mock_driver = MagicMock()
         mock_driver.current_url = "https://ads.google.com/aw/billing/documents"
+        mock_driver.window_handles = ["main"]
 
         mock_el = make_mock_element()
         mock_driver.find_elements.return_value = [mock_el]
+        mock_driver.execute_cdp_cmd = MagicMock()
 
-        with patch(
-            "googleads_invoice.live_brave_download.chrome_driver_attach",
-            return_value=mock_driver,
-        ) as mock_attach:
-            # Create a "downloaded" PDF after click
+        with (
+            patch(
+                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                return_value=mock_driver,
+            ) as mock_attach,
+        ):
             def _simulate_click(*args: object, **kwargs: object) -> None:
-                (download_dir / "invoice_G1234567890_2026-04-02.pdf").write_text(
-                    "pdf bytes", encoding="utf-8"
-                )
+                # Copy the real fixture PDF into download dir (passes parse_invoice_pdf)
+                import shutil
+                shutil.copy2(fixture_pdf, download_dir / fixture_pdf.name)
 
             mock_el.click.side_effect = _simulate_click
 
@@ -143,6 +153,8 @@ class TestLiveBraveDownloadPdf:
                 debugger_address="127.0.0.1:9222",
                 deeplink_url="https://c.gle/abc123",
                 download_dir=download_dir,
+                navigation_timeout_s=5,
+                download_timeout_s=30,
             )
 
         mock_attach.assert_called_once_with(
@@ -152,7 +164,9 @@ class TestLiveBraveDownloadPdf:
         mock_driver.get.assert_called_once_with("https://c.gle/abc123")
         mock_el.click.assert_called_once()
         assert result_path.suffix == ".pdf"
-        assert result_path.read_text(encoding="utf-8") == "pdf bytes"
+        assert result_path.stat().st_size > 0
+        # Should be renamed to the final format
+        assert "GoogleAds" in result_path.name or "google" in result_path.name.lower()
 
     def test_navigation_timeout_raises_and_saves_trace(self, tmp_path: Path) -> None:
         """If billing/documents doesn't appear, error includes trace paths."""
@@ -238,7 +252,7 @@ class TestLiveBraveDownloadPdf:
                 return_value=(tmp_path / "trace.html", tmp_path / "trace.png"),
             ) as mock_save,
         ):
-            with pytest.raises(LiveBraveDownloadError, match="no new PDF"):
+            with pytest.raises(LiveBraveDownloadError, match="No new PDF in"):
                 live_brave_download_pdf(
                     debugger_address="127.0.0.1:9222",
                     deeplink_url="https://c.gle/nope",

@@ -10,6 +10,7 @@ from pathlib import Path
 from googleads_invoice.addresses import (
     DEFAULT_GMAIL_SENDER,
     DEFAULT_TEST_RECIPIENT,
+    DEFAULT_PRODUCTION_RECIPIENT,
 )
 from googleads_invoice.billing_period import (
     billing_month_label_for_previous_calendar_month,
@@ -298,6 +299,14 @@ def main(argv: list[str] | None = None) -> int:
             "set env to jack.copeland@theglugglejugfactory.com for Jack)."
         ),
     )
+    run_p.add_argument(
+        "--test-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Test mode: send to test inbox, no CC/BCC, no Dropbox copy."
+        ),
+    )
 
     url_p = sub.add_parser(
         "billing-url-from-gmail",
@@ -362,7 +371,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-        to_addr = _resolve_recipient(args.to)
+        if args.test_run:
+            to_addr = _resolve_recipient(args.to)
+        else:
+            to_addr = DEFAULT_PRODUCTION_RECIPIENT
 
         try:
             gmail_backend = GmailApiReadBackend.from_env()
@@ -371,6 +383,26 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
+
+        if not args.test_run:
+            from googleads_invoice.billing_period import billing_month_label_for_previous_calendar_month
+            from googleads_invoice.addresses import CC_RECIPIENTS
+            month_str = billing_month_label_for_previous_calendar_month()
+            print(
+                f"About to send {month_str} invoice:",
+                file=sys.stderr,
+            )
+            print(f"  To: {to_addr}", file=sys.stderr)
+            print(f"  CC: {', '.join(CC_RECIPIENTS)}", file=sys.stderr)
+            from googleads_invoice.addresses import BCC_RECIPIENTS
+            print(f"  BCC: {', '.join(BCC_RECIPIENTS)}", file=sys.stderr)
+            try:
+                confirm = input("  Confirm? (Y/n): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+            if confirm not in ("", "y", "yes"):
+                print("Aborted.", file=sys.stderr)
+                return 2
 
         try:
             report = run_month(
@@ -382,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
                 smtp_backend=smtp_backend,
                 smtp_sender=smtp_user,
                 to_address=to_addr,
+                test_run=args.test_run,
             )
         except RunMonthError as e:
             print(str(e), file=sys.stderr)
@@ -389,7 +422,10 @@ def main(argv: list[str] | None = None) -> int:
 
         print("Run-month completed successfully.", file=sys.stderr)
         print(f"  Billing URL: {report.billing_url}", file=sys.stderr)
-        print(f"  PDF saved: {report.pdf_path}", file=sys.stderr)
+        if report.dropbox_path:
+            print(f"  PDF moved to: {report.dropbox_path}", file=sys.stderr)
+        else:
+            print(f"  PDF saved: {report.pdf_path}", file=sys.stderr)
         print(f"  Invoice: {report.issue_date}, EUR {report.amount_eur}", file=sys.stderr)
         print(f"  Sent to: {report.recipient}", file=sys.stderr)
         print(f"  Subject: {report.email_subject!r}", file=sys.stderr)

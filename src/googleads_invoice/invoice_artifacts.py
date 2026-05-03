@@ -30,14 +30,12 @@ def build_email_subject(fields: InvoiceOutputFields) -> str:
 
 
 def build_email_body(fields: InvoiceOutputFields) -> str:
-    """Plain-text body; month label is human-facing, issue date is ISO for clarity."""
-    disp = _eur_display_amount(fields.amount_eur)
-    iso = fields.issue_date.isoformat()
+    """Plain-text body for Jack's monthly invoice mail."""
     return (
-        f"Hi Jack,\n\n"
-        f"Attached: Google Ads invoice for {fields.month_label}. "
-        f"Amount EUR {disp}, issue date {iso}.\n\n"
-        f"—\n"
+        f"Dear Jack,\n\n"
+        f"Please find the GoogleAds invoice attached for {fields.month_label}.\n\n"
+        f"Cheers,\n"
+        f"Chaehan\n"
     )
 
 

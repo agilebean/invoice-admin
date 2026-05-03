@@ -46,6 +46,8 @@ class GmailBackend(Protocol):
         body: str,
         pdf_path: Path,
         attachment_name: str,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> str:
         """Send ``body`` with one PDF attachment; return an opaque send handle / id."""
         ...
@@ -94,6 +96,8 @@ class GmailFacade:
         body: str,
         pdf_path: Path,
         attachment_name: str,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> str:
         try:
             return self._backend.send_text_with_pdf_attachment(
@@ -103,6 +107,8 @@ class GmailFacade:
                 body=body,
                 pdf_path=pdf_path,
                 attachment_name=attachment_name,
+                cc=cc,
+                bcc=bcc,
             )
         except GmailTransportError:
             raise

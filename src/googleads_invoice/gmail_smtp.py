@@ -31,6 +31,8 @@ class SmtpGmailBackend:
         self._app_password = app_password
         self._host = host
         self._port = port
+        # Port 465 uses direct SSL; port 587 uses STARTTLS
+        self._use_ssl = (port == 465)
 
     def list_messages(self, query: str, *, max_results: int = 10) -> list[GmailMessageSummary]:
         raise GmailTransportError(
@@ -66,6 +68,8 @@ class SmtpGmailBackend:
         body: str,
         pdf_path: Path,
         attachment_name: str,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
     ) -> str:
         if sender.strip() != self._user:
             raise GmailTransportError(
@@ -77,6 +81,10 @@ class SmtpGmailBackend:
         msg = EmailMessage()
         msg["From"] = sender
         msg["To"] = to
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)
         msg["Subject"] = subject
         msg.set_content(body)
         msg.add_attachment(
@@ -89,12 +97,29 @@ class SmtpGmailBackend:
         return "smtp:pdf:ok"
 
     def _send_message(self, msg: EmailMessage) -> None:
-        try:
-            with smtplib.SMTP(self._host, self._port, timeout=60) as server:
-                server.starttls()
-                server.login(self._user, self._app_password)
-                server.send_message(msg)
-        except smtplib.SMTPException as e:
-            raise GmailTransportError(str(e)) from e
-        except OSError as e:
-            raise GmailTransportError(str(e)) from e
+        import ssl as _ssl
+        last_error: Exception | None = None
+        ports_to_try = [(self._host, self._port, self._use_ssl)]
+        # Fallback: if 587 fails, try 465; if 465 fails, try 587
+        if self._port == 587:
+            ports_to_try.append((self._host, 465, True))
+        elif self._port == 465:
+            ports_to_try.append((self._host, 587, False))
+
+        for host, port, use_ssl in ports_to_try:
+            try:
+                if use_ssl:
+                    ctx = _ssl.create_default_context()
+                    with smtplib.SMTP_SSL(host, port, timeout=120, context=ctx) as server:
+                        server.login(self._user, self._app_password)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(host, port, timeout=120) as server:
+                        server.starttls()
+                        server.login(self._user, self._app_password)
+                        server.send_message(msg)
+                return
+            except (smtplib.SMTPException, OSError) as e:
+                last_error = e
+                continue
+        raise GmailTransportError(str(last_error or "SMTP connection failed"))
