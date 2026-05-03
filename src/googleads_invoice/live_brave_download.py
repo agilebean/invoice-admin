@@ -49,6 +49,8 @@ def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
     Returns the element if found; raises :exc:`LiveBraveDownloadError` otherwise.
     """
     selectors: list[str] = [
+        # Inside the documentcenter iframe: individual row Download links are <a>Download</a>
+        '//a[text()="Download"]',
         # Google Ads often uses aria-labels on clickable rows
         '//*[starts-with(@aria-label, "Download")]',
         # Explicit link/button/span with Download text
@@ -164,6 +166,16 @@ def live_brave_download_pdf(
                 f"Tab URLs: {all_urls}"
             ) from exc
 
+        # The billing documents table is inside an iframe from payments.google.com
+        # Switch to it so we can find and click Download links
+        try:
+            doc_iframe = WebDriverWait(driver, 10).until(
+                lambda d: d.find_element(By.CSS_SELECTOR, "iframe[src*='documentcenter']")
+            )
+            driver.switch_to.frame(doc_iframe)
+        except Exception:
+            pass  # No iframe found; _find may still work on the top-level document
+
         # Wait for dynamically rendered content (React/SPA table)
         try:
             WebDriverWait(driver, 15).until(
@@ -199,24 +211,36 @@ def live_brave_download_pdf(
             except Exception as exc:
                 diag_text = f"(diagnostic failed: {exc})"
             try:
-                # Check for iframes, shadow DOMs, and actual content elements
+                # Deep diagnostic: shadow DOMs, iframes, and all text content
                 tabs_text = driver.execute_script(
-                    "let items = []; "
-                    "// Check iframes\n"
+                    "let items = [];\n"
+                    "// Check shadow DOMs recursively\n"
+                    "function findInShadow(root, depth) {\n"
+                    "  if (depth > 5) return;\n"
+                    "  let all = root.querySelectorAll('*');\n"
+                    "  for (let el of all) {\n"
+                    "    if (el.shadowRoot) {\n"
+                    "      items.push('SHADOW in ' + el.tagName + ':' + (el.shadowRoot.textContent || '').trim().slice(0, 200));\n"
+                    "      findInShadow(el.shadowRoot, depth + 1);\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "findInShadow(document, 0);\n"
+                    "// Check iframes and their content\n"
                     "items.push('IFRAMES: ' + document.querySelectorAll('iframe').length);\n"
-                    "document.querySelectorAll('iframe').forEach((f, i) => items.push('  iframe[' + i + ']: ' + (f.src || '').slice(0, 100)));\n"
-                    "// Count total elements\n"
-                    "items.push('TOTAL DOM elements: ' + document.querySelectorAll('*').length);\n"
-                    "// Get main content area - all elements under the .awsm-content container\n"
-                    "let content = document.querySelector('.awsm-content, .awsm-sub-container, .awsm-notifications-and-content, [class*=content], [class*=main]');\n"
-                    "if (content) items.push('CONTENT elements: ' + content.querySelectorAll('*').length);\n"
-                    "// Check for shadow roots\n"
-                    "let shadows = 0;\n"
-                    "document.querySelectorAll('*').forEach(el => { if (el.shadowRoot) shadows++; });\n"
-                    "items.push('Elements with shadowRoot: ' + shadows);\n"
-                    "// Get the actual innerHTML of the content area (first 2000 chars)\n"
-                    "let bodyHtml = document.body.innerHTML.slice(20000, 25000);\n"
-                    "items.push('BODY HTML [20000-25000]: ' + bodyHtml.slice(0, 1000));\n"
+                    "for (let f of document.querySelectorAll('iframe')) {\n"
+                    "  try { items.push('  iframe:' + (f.contentDocument.body.innerText || '').trim().slice(0, 300)); } catch(e) { items.push('  iframe: blocked'); }\n"
+                    "}\n"
+                    "// Get text of main content containers specifically\n"
+                    "let selectors = ['.awsm-content', '.awsm-child-content', 'awsml-billing-documents', '[class*=billing]', '[class*=document]'];\n"
+                    "for (let sel of selectors) {\n"
+                    "  let el = document.querySelector(sel);\n"
+                    "  if (el) items.push(sel + ': ' + (el.textContent || '').trim().slice(0, 500));\n"
+                    "}\n"
+                    "// Check for Angular-specific elements\n"
+                    "items.push('Angular components: ' + document.querySelectorAll('[class*=ng], [class*=_nghost], [class*=_ngcontent], awsml-*, mat-*').length);\n"
+                    "// Full body text with newlines preserved\n"
+                    "items.push('BODY TEXT:\n' + (document.body.innerText || '').slice(0, 5000));\n"
                     "return items;"
                 )
                 tabs_line = "\n".join(f"  {x}" for x in (tabs_text or []))
