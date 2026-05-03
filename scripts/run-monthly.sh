@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-LOG_DIR="$HOME/.googleads-invoice/logs"
+LOG_DIR="$HOME/.gmail/logs"
 mkdir -p "$LOG_DIR"
 
 # Start Brave with remote debugging

@@ -23,9 +23,9 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/chaehan/.googleads-invoice/logs/monthly-stdout.log</string>
+    <string>/Users/chaehan/.gmail/logs/monthly-stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/chaehan/.googleads-invoice/logs/monthly-stderr.log</string>
+    <string>/Users/chaehan/.gmail/logs/monthly-stderr.log</string>
 
     <key>RunAtLoad</key>
     <false/>

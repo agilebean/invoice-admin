@@ -124,6 +124,18 @@ googleads-invoice billing-url-from-gmail
 
 **`googleads-invoice: command not found`:** run **`mamba activate googleads-invoice-glugglejug`**, then **`pip install -e ".[dev]"`** again if entry points changed. The script is under **`$CONDA_PREFIX/bin/googleads-invoice`** on Unix; you can call **`python -m googleads_invoice ...`** if **`PATH`** is wrong.
 
+### Monthly scheduling (launchd)
+
+Automatically runs `run-month` on the 2nd at 05:00 (Brave starts/stops automatically):
+
+```bash
+mkdir -p ~/.gmail/logs
+ln -sf ~/Software/Prototypes/googleads-invoice-glugglejug/scripts/com.googleads-invoice.monthly.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.googleads-invoice.monthly.plist
+```
+
+Logs at `~/.gmail/logs/`. Test with `launchctl start com.googleads-invoice.monthly`. Unload to stop.
+
 ### Browser / e2e (optional, local)
 
 **Google Ads / billing pages:** use **your Brave** (logged-in profile). **Do not** rely on Cursor’s embedded browser for those URLs.
