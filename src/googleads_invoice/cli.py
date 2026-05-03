@@ -32,6 +32,7 @@ from googleads_invoice.invoice_artifacts import (
     build_renamed_pdf_filename,
 )
 from googleads_invoice.invoice_pdf import parse_invoice_pdf
+from googleads_invoice.api_download import ApiDownloadError, api_download_pdf
 from googleads_invoice.live_brave_download import LiveBraveDownloadError, live_brave_download_pdf
 from googleads_invoice.mail_app_draft import MailAppDraftError, open_mail_app_draft
 from googleads_invoice.pipeline import format_dry_run_report, run_dry_run
@@ -45,6 +46,7 @@ _ENV_SMTP_PW_FILE = "GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE"
 _ENV_CONFIRM_SEND = "GOOGLEADS_CONFIRM_TEST_SEND"
 _ENV_CONFIRM_MAIL_DRAFT = "GOOGLEADS_CONFIRM_MAIL_APP_DRAFT"
 _ENV_CONFIRM_LIVE_BRAVE = "GOOGLEADS_CONFIRM_LIVE_BRAVE"
+_ENV_CONFIRM_API_DOWNLOAD = "GOOGLEADS_CONFIRM_API_DOWNLOAD"
 _ENV_CONFIRM_RUN_MONTH = "GOOGLEADS_CONFIRM_RUN_MONTH"
 _ENV_INVOICE_TO = "GOOGLEADS_INVOICE_TO"
 
@@ -253,6 +255,31 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    api = sub.add_parser(
+        "api-download",
+        help=(
+            "Download invoice PDF via OAuth2 + HTTP requests (no browser needed). "
+            f"Requires {_ENV_CONFIRM_API_DOWNLOAD}=1."
+        ),
+    )
+    api.add_argument(
+        "--deeplink",
+        default=None,
+        help=(
+            "Billing deeplink URL (c.gle short link); "
+            "default: GOOGLEADS_BILLING_DEEPLINK env."
+        ),
+    )
+    api.add_argument(
+        "--download-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory to save the downloaded PDF into "
+            "(default: GOOGLEADS_LIVE_BRAVE_TRACE_DIR env, or ~/Downloads)."
+        ),
+    )
+
     run_p = sub.add_parser(
         "run-month",
         help=(
@@ -307,6 +334,16 @@ def main(argv: list[str] | None = None) -> int:
             "Test mode: send to test inbox, no CC/BCC, no Dropbox copy."
         ),
     )
+    run_p.add_argument(
+        "--download-method",
+        choices=("brave", "api"),
+        default="brave",
+        help=(
+            "How to download the invoice PDF: "
+            "'brave' (Selenium + browser, default) or "
+            "'api' (OAuth2 + HTTP requests, no browser needed)."
+        ),
+    )
 
     url_p = sub.add_parser(
         "billing-url-from-gmail",
@@ -343,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         addr = (args.debugger_address or "").strip() or os.environ.get(
             "GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", ""
         ).strip()
-        if not addr:
+        if not addr and args.download_method != "api":
             print(
                 "Provide --debugger-address or set GOOGLEADS_BROWSER_DEBUGGER_ADDRESS.",
                 file=sys.stderr,
@@ -414,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
                 smtp_sender=smtp_user,
                 to_address=to_addr,
                 test_run=args.test_run,
+                download_method=args.download_method,
             )
         except RunMonthError as e:
             print(str(e), file=sys.stderr)
@@ -472,6 +510,46 @@ def main(argv: list[str] | None = None) -> int:
                 download_dir=dl_dir,
             )
         except LiveBraveDownloadError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        print(f"Downloaded PDF: {pdf_path}", file=sys.stderr)
+        return 0
+    if args.command == "api-download":
+        if os.environ.get(_ENV_CONFIRM_API_DOWNLOAD, "") != "1":
+            print(
+                f"Refusing: set {_ENV_CONFIRM_API_DOWNLOAD}=1 after confirming your "
+                "OAuth token has a Google Ads or Google Payments scope.",
+                file=sys.stderr,
+            )
+            return 2
+        link = (args.deeplink or "").strip() or os.environ.get(
+            "GOOGLEADS_BILLING_DEEPLINK", ""
+        ).strip()
+        if not link:
+            print(
+                "Provide --deeplink or set GOOGLEADS_BILLING_DEEPLINK "
+                "(the c.gle short link from the billing notification mail).",
+                file=sys.stderr,
+            )
+            return 2
+        dl_dir_raw = args.download_dir
+        if dl_dir_raw is None:
+            dl_env = os.environ.get("GOOGLEADS_LIVE_BRAVE_TRACE_DIR", "").strip()
+            dl_dir = Path(dl_env).expanduser() if dl_env else Path.home() / "Downloads"
+        else:
+            dl_dir = dl_dir_raw.expanduser()
+        try:
+            backend = GmailApiReadBackend.from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        try:
+            pdf_path = api_download_pdf(
+                billing_url=link,
+                credentials=backend._credentials,
+                download_dir=dl_dir,
+            )
+        except ApiDownloadError as e:
             print(str(e), file=sys.stderr)
             return 2
         print(f"Downloaded PDF: {pdf_path}", file=sys.stderr)

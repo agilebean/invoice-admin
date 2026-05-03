@@ -23,7 +23,10 @@ DEFAULT_BILLING_MAIL_QUERY = (
     'from:payments-noreply@google.com subject:"Google Ads: Your billing document is ready"'
 )
 
-_SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
+_SCOPES = (
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/adwords",
+)
 
 
 def _urlsafe_b64decode(data: str) -> bytes:

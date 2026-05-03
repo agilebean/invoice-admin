@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+from googleads_invoice.api_download import ApiDownloadError, api_download_pdf
 from googleads_invoice.billing_period import (
     billing_month_label_for_previous_calendar_month,
 )
@@ -79,6 +80,8 @@ def run_month(
     test_run: bool = False,
     # Month label (None = auto from previous calendar month)
     month_label: str | None = None,
+    # Download method: "brave" (Selenium) or "api" (OAuth2 + HTTP)
+    download_method: str = "brave",
 ) -> RunMonthReport:
     """Run the full monthly invoice flow: Gmail → Brave download → parse → SMTP send."""
     _t0 = time.monotonic()
@@ -126,18 +129,28 @@ def run_month(
             f"billing URL."
         )
 
-    # 2. Brave download → PDF
-    _step(3, "Launching Brave to download invoice PDF...")
+    # 2. Download PDF (Brave browser or API method)
+    download_method_label = {"brave": "Brave browser", "api": "API"}.get(
+        download_method, download_method
+    )
+    _step(3, f"Downloading invoice PDF via {download_method_label}...")
     try:
-        pdf_path = live_brave_download_pdf(
-            debugger_address=debugger_address,
-            deeplink_url=billing_url,
-            download_dir=download_dir,
-            navigation_timeout_s=navigation_timeout_s,
-            download_timeout_s=download_timeout_s,
-            verbose=False,
-        )
-    except LiveBraveDownloadError as e:
+        if download_method == "api":
+            pdf_path = api_download_pdf(
+                billing_url=billing_url,
+                credentials=gmail_read_backend._credentials,
+                download_dir=download_dir,
+            )
+        else:
+            pdf_path = live_brave_download_pdf(
+                debugger_address=debugger_address,
+                deeplink_url=billing_url,
+                download_dir=download_dir,
+                navigation_timeout_s=navigation_timeout_s,
+                download_timeout_s=download_timeout_s,
+                verbose=False,
+            )
+    except (LiveBraveDownloadError, ApiDownloadError) as e:
         raise RunMonthError(str(e)) from e
     steps.append(f"PDF downloaded: {pdf_path}")
 
