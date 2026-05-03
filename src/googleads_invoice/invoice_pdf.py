@@ -1,9 +1,12 @@
-"""Parse invoice issue date and EUR total from PDF bytes or paths."""
+"""Parse invoice issue date and EUR total from PDF bytes or paths.
+
+Supports both synthetic test PDFs and real Google Ads invoice PDFs.
+"""
 
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
@@ -37,28 +40,81 @@ def parse_invoice_pdf(source: str | Path | bytes) -> tuple[date, Decimal]:
 
 
 def _extract_issue_date(text: str) -> date:
+    # Format 1: synthetic test PDF — "Invoice date: 2026-03-15"
     match = re.search(r"Invoice date:\s*(\d{4}-\d{2}-\d{2})", text)
-    if not match:
-        raise InvoicePdfError(
-            "Could not parse invoice date (expected a line like 'Invoice date: YYYY-MM-DD')."
-        )
-    return date.fromisoformat(match.group(1))
+    if match:
+        return date.fromisoformat(match.group(1))
+
+    # Format 2: real Google Ads invoice — "Apr 30, 2026" or "April 30, 2026"
+    # The date appears after "Invoice date" column header or near the top
+    match = re.search(
+        r"(January|February|March|April|May|June|July|August|September|"
+        r"October|November|December|"
+        r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+        r"\s+(\d{1,2}),\s+(\d{4})",
+        text,
+        re.MULTILINE,
+    )
+    if match:
+        month_str = match.group(1)
+        day = int(match.group(2))
+        year = int(match.group(3))
+        # Handle both abbreviated and full month names
+        try:
+            dt = datetime.strptime(f"{month_str} {day} {year}", "%b %d %Y")
+        except ValueError:
+            dt = datetime.strptime(f"{month_str} {day} {year}", "%B %d %Y")
+        return dt.date()
+
+    raise InvoicePdfError(
+        "Could not parse invoice date from PDF text. "
+        "Expected either 'Invoice date: YYYY-MM-DD' (synthetic) or "
+        "'Mon DD, YYYY' (real Google Ads invoice)."
+    )
 
 
 def _extract_amount_due_eur(text: str) -> Decimal:
+    # Format 1: synthetic test PDF — "Amount due: <amount>"
     match = re.search(r"Amount due:\s*(.+)", text)
-    if not match:
-        raise InvoicePdfError("Could not find amount due line in PDF text.")
-    raw = match.group(1).strip()
-    raw = re.sub(r"^(EUR|€)\s*", "", raw, flags=re.I).strip()
-    raw = re.sub(r"\s*(EUR|€)\s*$", "", raw, flags=re.I).strip()
-    try:
-        return _parse_money_token(raw)
-    except (InvalidOperation, ValueError) as e:
-        raise InvoicePdfError(f"Could not parse EUR amount from {raw!r}.") from e
+    if match:
+        raw = match.group(1).strip()
+        raw = re.sub(r"^(EUR|€)\s*", "", raw, flags=re.I).strip()
+        raw = re.sub(r"\s*(EUR|€)\s*$", "", raw, flags=re.I).strip()
+        try:
+            return _parse_money_token(raw)
+        except (InvalidOperation, ValueError):
+            pass  # Fall through to Format 2
+
+    # Format 2: real Google Ads invoice — "€6,496.76" followed by "Total in EUR"
+    lines = text.split("\n")
+    total_amount: Decimal | None = None
+    for i, line in enumerate(lines):
+        if "Total in EUR" in line:
+            # Search backward for the nearest "€" amount before this line
+            for j in range(i - 1, max(0, i - 10), -1):
+                euro_match = re.search(r"€\s*([\d.,]+)", lines[j])
+                if euro_match:
+                    total_amount = _parse_money_token(euro_match.group(1))
+                    break
+            break
+
+    if total_amount is not None:
+        return total_amount
+
+    # Format 3: any "€" amount in the text (last resort)
+    all_euro = re.findall(r"€\s*([\d.,]+)", text)
+    if all_euro:
+        # Take the last € amount (usually the total)
+        return _parse_money_token(all_euro[-1])
+
+    raise InvoicePdfError(
+        "Could not find EUR total in PDF text. "
+        "Expected 'Amount due:' or '€' with 'Total in EUR' or a plain '€' amount."
+    )
 
 
 def _parse_money_token(token: str) -> Decimal:
+    """Parse a monetary value string like '1,234.56' or '1.234,56' or '1234.56'."""
     last_comma = token.rfind(",")
     last_dot = token.rfind(".")
     if last_comma != -1 and last_dot != -1:
