@@ -17,6 +17,8 @@ pip install -e ".[dev,oauth]"
 | Gmail API token (read-only) | `python scripts/get_gmail_token.py` | `GOOGLEADS_GMAIL_OAUTH_TOKEN` |
 | SMTP app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → save to `~/.gmail/gmail-smtp-app-password` | `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` |
 
+> **VPN note:** SMTP (port 587/465 to `smtp.gmail.com`) must be allowed. If blocked, add `smtp.gmail.com` to your VPN's bypass list.
+
 ## CLI
 
 ```
