@@ -64,7 +64,7 @@ def run_month(
     debugger_address: str,
     download_dir: Path,
     navigation_timeout_s: float = 45,
-    download_timeout_s: float = 60,
+    download_timeout_s: float = 120,
     # SMTP send
     smtp_backend: SmtpGmailBackend,
     smtp_sender: str,

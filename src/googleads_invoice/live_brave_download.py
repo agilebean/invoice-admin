@@ -105,7 +105,7 @@ def live_brave_download_pdf(
     deeplink_url: str,
     download_dir: Path,
     navigation_timeout_s: float = 45,
-    download_timeout_s: float = 60,
+    download_timeout_s: float = 120,
 ) -> Path:
     """Attach to Brave, navigate the billing deeplink, click Download, return local PDF path.
 
@@ -128,8 +128,6 @@ def live_brave_download_pdf(
     """
     download_dir = download_dir.expanduser().resolve()
     download_dir.mkdir(parents=True, exist_ok=True)
-
-    before = {p.resolve() for p in download_dir.glob("*.pdf")}
 
     driver = chrome_driver_attach(
         debugger_address=debugger_address,
@@ -266,6 +264,9 @@ def live_brave_download_pdf(
         download_el.click()
 
         # The Download link opens a new tab with the document URL.
+        # Use JavaScript fetch() to download the PDF bytes from within the browser,
+        # bypassing the browser's native download dialog entirely.
+        new_tab_url: str | None = None
         try:
             current_handles = set(driver.window_handles)
             WebDriverWait(driver, 10).until(
@@ -274,27 +275,67 @@ def live_brave_download_pdf(
             new_handles = list(set(driver.window_handles) - current_handles)
             if new_handles:
                 driver.switch_to.window(new_handles[0])
+                new_tab_url = driver.current_url
         except Exception:
             pass  # No new tab opened
 
+        if new_tab_url:
+            # Fetch the PDF bytes via JavaScript (same browser context = same cookies)
+            import base64 as _b64
+            result = driver.execute_script(
+                """
+                return fetch(arguments[0], {credentials: 'include'})
+                    .then(function(r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.blob();
+                    })
+                    .then(function(blob) {
+                        return new Promise(function(resolve, reject) {
+                            var reader = new FileReader();
+                            reader.onload = function() { resolve(reader.result); };
+                            reader.onerror = function() { reject('FileReader error'); };
+                            reader.readAsDataURL(blob);
+                        });
+                    });
+                """,
+                new_tab_url,
+            )
+            if result and ',' in str(result):
+                raw = _b64.b64decode(str(result).split(',', 1)[1])
+                safe_name = f"googleads_invoice_{int(time.time())}.pdf"
+                out_path = (download_dir / safe_name).resolve()
+                out_path.write_bytes(raw)
+                return out_path
+
+        # Fallback: poll for new PDFs
         deadline = time.monotonic() + download_timeout_s
+        start_mtime = time.monotonic() - 5
+
         while time.monotonic() < deadline:
-            after = {p.resolve() for p in download_dir.glob("*.pdf")}
-            new = after - before
-            if new:
-                return max(new, key=lambda p: p.stat().st_mtime)
+            for p in download_dir.iterdir():
+                if p.suffix.lower() == ".pdf":
+                    try:
+                        mtime = p.stat().st_mtime
+                    except OSError:
+                        continue
+                    if mtime > start_mtime and p.stat().st_size > 0:
+                        return p.resolve()
             time.sleep(0.3)
 
-        # If no new PDF found in the target dir, scan more broadly
-        all_pdfs = sorted(download_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
-        recent = [p for p in all_pdfs if p.stat().st_mtime > time.monotonic() - 120][:5]
-        recent_info = "\n  ".join(f"{p.name} ({p.stat().st_size} bytes, modified {p.stat().st_mtime:.0f})" for p in recent)
+        recent = sorted(
+            [p for p in download_dir.iterdir() if p.suffix.lower() == ".pdf"],
+            key=lambda p: p.stat().st_mtime, reverse=True
+        )[:5]
+        recent_info = "\n  ".join(
+            f"{p.name} (modified {p.stat().st_mtime:.0f}, {p.stat().st_size} bytes)"
+            for p in recent
+        )
 
         trace_paths = save_live_brave_trace(driver, label="billing_download_timeout")
         raise LiveBraveDownloadError(
             f"Clicked Download but no new PDF appeared in {download_dir} within "
             f"{download_timeout_s}s.\n"
-            f"Recent PDFs in {download_dir}:\n  {recent_info}\n"
+            f"Existing PDFs in {download_dir}:\n  {recent_info}\n"
             f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
         )
     finally:
