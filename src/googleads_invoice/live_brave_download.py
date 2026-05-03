@@ -177,22 +177,39 @@ def live_brave_download_pdf(
         try:
             download_el = _find_download_on_documents_page(driver)
         except LiveBraveDownloadError:
-            # Diagnostic: find elements containing 'Download' or 'Invoice' or 'Document'
+            # Diagnostic: get full body text + any elements containing 'Download' or 'Invoice'
+            try:
+                body_text = driver.execute_script("return document.body.innerText;")
+            except Exception:
+                body_text = "(could not get body text)"
+
             try:
                 diag = driver.execute_script(
                     "let items = []; "
                     "document.querySelectorAll('*').forEach(el => {"
                     "  let t = (el.textContent || '').trim(); "
-                    "  if (t && (t.includes('Download') || t.includes('Invoice') || t.includes('Document'))) {"
-                    "    items.push(el.tagName + '#' + (el.id || '') + '.' + (el.className || '').slice(0, 40) + ':' + t.slice(0, 120));"
+                    "  if (t && (t.includes('Download') || t.includes('Invoice'))) {"
+                    "    items.push(el.tagName + '#' + (el.id || '') + '.' + (el.className || '').slice(0, 60) + ':' + t.slice(0, 160));"
                     "  }"
                     "}); return items;"
                 )
                 diag_text = "\n".join(f"  [{i}] {x}" for i, x in enumerate(diag or []))
                 if not diag_text:
-                    diag_text = "(no elements with Download/Invoice/Document text found)"
+                    diag_text = "(no Download/Invoice elements)"
             except Exception as exc:
                 diag_text = f"(diagnostic failed: {exc})"
+            try:
+                tabs_text = driver.execute_script(
+                    "let items = []; "
+                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox]').forEach(el => {"
+                    "  let t = (el.textContent || '').trim().slice(0, 100); "
+                    "  if (t) items.push(el.tagName + '|' + el.getAttribute('role','') + ':' + t);"
+                    "}); return items;"
+                )
+                tabs_line = "\n".join(f"  {x}" for x in (tabs_text or []))
+            except Exception:
+                tabs_line = "(tabs/buttons diagnostic failed)"
+            diag_text = "=== Full body text (first 3000 chars) ===\n" + (body_text or "")[:3000] + "\n\n=== Download/Invoice elements ===\n" + diag_text + "\n\n=== Tabs/buttons ===\n" + tabs_line
             trace_paths = save_live_brave_trace(driver, label="billing_no_download_btn")
             raise LiveBraveDownloadError(
                 f"Reached billing/documents but couldn't locate the Download element.\n"
