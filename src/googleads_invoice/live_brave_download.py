@@ -201,9 +201,9 @@ def live_brave_download_pdf(
             try:
                 tabs_text = driver.execute_script(
                     "let items = []; "
-                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox]').forEach(el => {"
-                    "  let t = (el.textContent || '').trim().slice(0, 100); "
-                    "  if (t) items.push(el.tagName + '|' + el.getAttribute('role','') + ':' + t);"
+                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox], [role=option], [role=combobox], mat-option, mat-select').forEach(el => {"
+                    "  let t = (el.textContent || '').trim().slice(0, 120); "
+                    "  if (t) items.push(el.tagName + '.' + (el.className || '').slice(0, 40) + ' role=' + (el.getAttribute('role') || '') + ':' + t);"
                     "}); return items;"
                 )
                 tabs_line = "\n".join(f"  {x}" for x in (tabs_text or []))
