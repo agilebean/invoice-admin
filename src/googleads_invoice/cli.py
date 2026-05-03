@@ -14,11 +14,15 @@ from googleads_invoice.addresses import (
 from googleads_invoice.billing_period import (
     billing_month_label_for_previous_calendar_month,
 )
+from googleads_invoice.billing_url import (
+    BillingUrlNotFoundError,
+    extract_billing_url,
+)
 from googleads_invoice.gmail_api_backend import (
     GmailApiReadBackend,
     billing_mail_query_from_env,
 )
-from googleads_invoice.gmail_facade import GmailFacade
+from googleads_invoice.gmail_facade import GmailFacade, GmailTransportError
 from googleads_invoice.gmail_smtp import SmtpGmailBackend
 from googleads_invoice.invoice_artifacts import (
     InvoiceOutputFields,
@@ -27,8 +31,10 @@ from googleads_invoice.invoice_artifacts import (
     build_renamed_pdf_filename,
 )
 from googleads_invoice.invoice_pdf import parse_invoice_pdf
+from googleads_invoice.live_brave_download import LiveBraveDownloadError, live_brave_download_pdf
 from googleads_invoice.mail_app_draft import MailAppDraftError, open_mail_app_draft
 from googleads_invoice.pipeline import format_dry_run_report, run_dry_run
+from googleads_invoice.run_month import RunMonthError, run_month
 
 _ENV_MAIL_HTML = "GOOGLEADS_INVOICE_MAIL_HTML"
 _ENV_INVOICE_PDF = "GOOGLEADS_INVOICE_PDF"
@@ -37,6 +43,8 @@ _ENV_SMTP_PW = "GOOGLEADS_GMAIL_SMTP_APP_PASSWORD"
 _ENV_SMTP_PW_FILE = "GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE"
 _ENV_CONFIRM_SEND = "GOOGLEADS_CONFIRM_TEST_SEND"
 _ENV_CONFIRM_MAIL_DRAFT = "GOOGLEADS_CONFIRM_MAIL_APP_DRAFT"
+_ENV_CONFIRM_LIVE_BRAVE = "GOOGLEADS_CONFIRM_LIVE_BRAVE"
+_ENV_CONFIRM_RUN_MONTH = "GOOGLEADS_CONFIRM_RUN_MONTH"
 _ENV_INVOICE_TO = "GOOGLEADS_INVOICE_TO"
 
 
@@ -210,7 +218,229 @@ def main(argv: list[str] | None = None) -> int:
         help="Max messages to list (default: 10).",
     )
 
+    lb = sub.add_parser(
+        "live-brave-download",
+        help=(
+            "Attach to Brave (--remote-debugging-port), navigate billing deeplink, "
+            "click Download on the top row, save the PDF to disk. "
+            f"Requires {_ENV_CONFIRM_LIVE_BRAVE}=1."
+        ),
+    )
+    lb.add_argument(
+        "--debugger-address",
+        default=None,
+        help=(
+            "Brave debugger address, e.g. 127.0.0.1:9222 "
+            "(default: GOOGLEADS_BROWSER_DEBUGGER_ADDRESS env)."
+        ),
+    )
+    lb.add_argument(
+        "--deeplink",
+        default=None,
+        help=(
+            "Billing deeplink URL (c.gle short link); "
+            "default: GOOGLEADS_BILLING_DEEPLINK env."
+        ),
+    )
+    lb.add_argument(
+        "--download-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory to save the downloaded PDF into "
+            "(default: GOOGLEADS_LIVE_BRAVE_TRACE_DIR env, or ~/Downloads)."
+        ),
+    )
+
+    run_p = sub.add_parser(
+        "run-month",
+        help=(
+            "Full monthly flow: Gmail search → Brave download → PDF parse → SMTP send. "
+            f"Requires {_ENV_CONFIRM_RUN_MONTH}=1, Gmail OAuth token, Brave with "
+            "--remote-debugging-port, and SMTP app password."
+        ),
+    )
+    run_p.add_argument(
+        "--query",
+        default=None,
+        help=(
+            "Gmail search q= string (default: GOOGLEADS_GMAIL_BILLING_QUERY or built-in)."
+        ),
+    )
+    run_p.add_argument(
+        "--max-scan",
+        type=int,
+        default=5,
+        help="Max Gmail messages to scan for billing URL (default: 5).",
+    )
+    run_p.add_argument(
+        "--debugger-address",
+        default=None,
+        help=(
+            "Brave debugger address, e.g. 127.0.0.1:9222 "
+            "(default: GOOGLEADS_BROWSER_DEBUGGER_ADDRESS env)."
+        ),
+    )
+    run_p.add_argument(
+        "--download-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory for Brave PDF downloads "
+            "(default: GOOGLEADS_LIVE_BRAVE_TRACE_DIR env, or ~/Downloads)."
+        ),
+    )
+    run_p.add_argument(
+        "--to",
+        default=None,
+        help=(
+            f"Recipient (default: {_ENV_INVOICE_TO} env or {DEFAULT_TEST_RECIPIENT}; "
+            "set env to jack.copeland@theglugglejugfactory.com for Jack)."
+        ),
+    )
+
+    url_p = sub.add_parser(
+        "billing-url-from-gmail",
+        help=(
+            "Search Gmail (same query as list-billing-mail), fetch HTML for each hit until a "
+            "billing payments URL is found (Step 3 → dry-run input)."
+        ),
+    )
+    url_p.add_argument(
+        "--query",
+        default=None,
+        help="Gmail search q= (default: GOOGLEADS_GMAIL_BILLING_QUERY or built-in).",
+    )
+    url_p.add_argument(
+        "--max-scan",
+        type=int,
+        default=5,
+        help="Max messages to download and parse (default: 5).",
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "run-month":
+        if os.environ.get(_ENV_CONFIRM_RUN_MONTH, "") != "1":
+            print(
+                f"Refusing: set {_ENV_CONFIRM_RUN_MONTH}=1 after confirming all "
+                "secrets, Brave, and recipient are correct.",
+                file=sys.stderr,
+            )
+            return 2
+
+        query = (args.query or "").strip() or billing_mail_query_from_env()
+        max_scan = int(args.max_scan)
+
+        addr = (args.debugger_address or "").strip() or os.environ.get(
+            "GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", ""
+        ).strip()
+        if not addr:
+            print(
+                "Provide --debugger-address or set GOOGLEADS_BROWSER_DEBUGGER_ADDRESS.",
+                file=sys.stderr,
+            )
+            return 2
+
+        dl_dir_raw = args.download_dir
+        if dl_dir_raw is None:
+            dl_env = os.environ.get("GOOGLEADS_LIVE_BRAVE_TRACE_DIR", "").strip()
+            download_dir = Path(dl_env).expanduser() if dl_env else Path.home() / "Downloads"
+        else:
+            download_dir = dl_dir_raw.expanduser()
+
+        smtp_user = _smtp_login_user()
+        try:
+            smtp_pw = _smtp_app_password_from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        if not smtp_pw:
+            print(
+                f"Set {_ENV_SMTP_PW} or {_ENV_SMTP_PW_FILE} "
+                "(Gmail app password; prefer file with chmod 600).",
+                file=sys.stderr,
+            )
+            return 2
+
+        to_addr = _resolve_recipient(args.to)
+
+        try:
+            gmail_backend = GmailApiReadBackend.from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+
+        smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
+
+        try:
+            report = run_month(
+                gmail_read_backend=gmail_backend,
+                billing_query=query,
+                max_scan=max_scan,
+                debugger_address=addr,
+                download_dir=download_dir,
+                smtp_backend=smtp_backend,
+                smtp_sender=smtp_user,
+                to_address=to_addr,
+            )
+        except RunMonthError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+
+        print("Run-month completed successfully.", file=sys.stderr)
+        print(f"  Billing URL: {report.billing_url}", file=sys.stderr)
+        print(f"  PDF saved: {report.pdf_path}", file=sys.stderr)
+        print(f"  Invoice: {report.issue_date}, EUR {report.amount_eur}", file=sys.stderr)
+        print(f"  Sent to: {report.recipient}", file=sys.stderr)
+        print(f"  Subject: {report.email_subject!r}", file=sys.stderr)
+        print(f"  Attachment: {report.renamed_filename}", file=sys.stderr)
+        return 0
+
+    if args.command == "live-brave-download":
+        if os.environ.get(_ENV_CONFIRM_LIVE_BRAVE, "") != "1":
+            print(
+                f"Refusing: set {_ENV_CONFIRM_LIVE_BRAVE}=1 after confirming Brave is "
+                "running with --remote-debugging-port and the billing deeplink is correct.",
+                file=sys.stderr,
+            )
+            return 2
+        addr = (args.debugger_address or "").strip() or os.environ.get(
+            "GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", ""
+        ).strip()
+        if not addr:
+            print(
+                "Provide --debugger-address or set GOOGLEADS_BROWSER_DEBUGGER_ADDRESS "
+                "(e.g. 127.0.0.1:9222).",
+                file=sys.stderr,
+            )
+            return 2
+        link = (args.deeplink or "").strip() or os.environ.get(
+            "GOOGLEADS_BILLING_DEEPLINK", ""
+        ).strip()
+        if not link:
+            print(
+                "Provide --deeplink or set GOOGLEADS_BILLING_DEEPLINK "
+                "(the c.gle short link from the billing notification mail).",
+                file=sys.stderr,
+            )
+            return 2
+        dl_dir_raw = args.download_dir
+        if dl_dir_raw is None:
+            dl_env = os.environ.get("GOOGLEADS_LIVE_BRAVE_TRACE_DIR", "").strip()
+            dl_dir = Path(dl_env).expanduser() if dl_env else Path.home() / "Downloads"
+        else:
+            dl_dir = dl_dir_raw.expanduser()
+        try:
+            pdf_path = live_brave_download_pdf(
+                debugger_address=addr,
+                deeplink_url=link,
+                download_dir=dl_dir,
+            )
+        except LiveBraveDownloadError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        print(f"Downloaded PDF: {pdf_path}", file=sys.stderr)
+        return 0
     if args.command == "dry-run":
         mail_html_path = _path_from_flag_or_env(
             dry, args.mail_html, _ENV_MAIL_HTML, "--mail-html"
@@ -326,4 +556,34 @@ def main(argv: list[str] | None = None) -> int:
         for r in rows:
             print(f"{r.id}\t{r.thread_id}\t{r.snippet}")
         return 0
+    if args.command == "billing-url-from-gmail":
+        query = (args.query or "").strip() or billing_mail_query_from_env()
+        try:
+            backend = GmailApiReadBackend.from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        try:
+            rows = backend.list_messages(
+                query, max_results=int(args.max_scan)
+            )
+        except Exception as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        for r in rows:
+            try:
+                html = backend.get_message_html(r.id)
+                url = extract_billing_url(html)
+                print(url)
+                return 0
+            except GmailTransportError as e:
+                print(f"{r.id}: {e}", file=sys.stderr)
+                continue
+            except BillingUrlNotFoundError:
+                continue
+        print(
+            "No billing URL found in scanned messages (try --max-scan or --query).",
+            file=sys.stderr,
+        )
+        return 1
     return 2

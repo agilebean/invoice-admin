@@ -21,6 +21,7 @@ googleads-invoice = "googleads_invoice.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "selenium>=4.15"]
+oauth = ["google-auth-oauthlib>=1.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/googleads_invoice"]

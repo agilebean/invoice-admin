@@ -14,6 +14,20 @@ Monthly: read billing mail on `chaehan.so@gmail.com` (Gmail API), open invoice l
 
 Python 3.12+, pytest, Gmail API SDK, Selenium 4 (+ driver), PDF lib (pdfplumber or PyMuPDF), GitHub Actions, `launchd` when stable.
 
+## Pre-flight ritual (start every session here)
+
+Before making any change, run these checks in order and report the result:
+
+1. **Read this PLAN.md** — find the current implementation status (check the iteration/backward-plan tables for ✅ markers). Know what's done, what's next.
+2. **Check test health** — run `python -m pytest -q --tb=short -W ignore::DeprecationWarning` and report passed vs skipped counts. Regressions must be fixed before new work.
+3. **State the next step** — from the story map or backward plan, identify the nearest unmarked slice. Explain in plain terms:
+   - What will change for the user (impact, not implementation detail).
+   - What env vars / file paths / manual steps the maintainer needs.
+   - What the acceptance criteria are.
+4. **Get approval** — do not write code until the user confirms the next step.
+
+When the session is done, mark the iteration/step ✅ and re-run step 1 for the next contributor.
+
 ## Delivery (agile, strict TDD)
 
 - Thin vertical slices (~½–2 days), one logical PR per slice.
@@ -142,8 +156,9 @@ See **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** for the full interview and recorde
 |---|------|---------|--------|
 | **10.1** | **1** | One real **Gmail SMTP** send with PDF attachment | **`googleads-invoice send-test-pdf`**; **`GOOGLEADS_GMAIL_SMTP_USER`**, **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD`** or **`GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE`**, **`GOOGLEADS_CONFIRM_TEST_SEND=1`**. |
 | **10.2** | **2** | **Mail.app** draft with same subject/body/attachment naming as step 1 | **`googleads-invoice mail-app-draft`**; **`GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1`**; **macOS** + Mail.app only. |
-| **10.3** | **3** | **Gmail API** search for billing notification mail | **`googleads-invoice list-billing-mail`**; **`GOOGLEADS_GMAIL_OAUTH_TOKEN`** (authorized user JSON, **`gmail.readonly`**); optional **`GOOGLEADS_GMAIL_BILLING_QUERY`**. |
-| **10.4** | **4** | **Brave** billing Documents / UI identification | **`live_brave`**, traces under **`~/Downloads`** when enabled — interview **D3**. |
+| **10.3** | **3** | **Gmail API** search + billing URL from message HTML | **`list-billing-mail`**, **`billing-url-from-gmail`** (prints payments URL); **`GOOGLEADS_GMAIL_OAUTH_TOKEN`**; optional **`GOOGLEADS_GMAIL_BILLING_QUERY`**. Verified end-to-end 2026-05-03: OAuth token generated, `list-billing-mail` returns billing messages. |
+| **10.4** | **4** | **Brave** billing Documents / UI identification + download | **`googleads-invoice live-brave-download`** (``--debugger-address`` / ``GOOGLEADS_BROWSER_DEBUGGER_ADDRESS``, ``--deeplink`` / ``GOOGLEADS_BILLING_DEEPLINK``, ``--download-dir``, ``GOOGLEADS_CONFIRM_LIVE_BRAVE=1``). Saves HTML+PNG trace when download button can't be matched. |
+| **11** | **5** | **Full monthly flow**: Gmail search → Brave download → parse → SMTP send, one command | **`googleads-invoice run-month`**; requires **`GOOGLEADS_CONFIRM_RUN_MONTH=1`** + Gmail OAuth token + Brave debugger + SMTP app password. See **`run-month`** help. |
 
 ---
 

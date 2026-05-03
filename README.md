@@ -110,6 +110,16 @@ googleads-invoice list-billing-mail
 # optional: --query 'from:payments-noreply@google.com ...'  --max-results 5
 ```
 
+### Billing URL from Gmail (**Gmail API**, Step 3 — READ-ONLY)
+
+Scans the same search as **`list-billing-mail`**, downloads **`text/html`** for each hit (up to **`--max-scan`**), and prints the first URL that passes **`extract_billing_url`** ( **`payments.google.com`** / **`pay.google.com`** ). Use stdout as input elsewhere (e.g. paste into **`GOOGLEADS_BILLING_DEEPLINK`** for **`live_brave`**).
+
+```bash
+export GOOGLEADS_GMAIL_OAUTH_TOKEN="$HOME/path/to/your-token.json"
+googleads-invoice billing-url-from-gmail
+# optional: --max-scan 10  --query 'from:payments-noreply@google.com ...'
+```
+
 **Step 4** (Brave Documents / `live_brave`) is tracked in **PLAN §10.4** and **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`**.
 
 **`googleads-invoice: command not found`:** run **`mamba activate googleads-invoice-glugglejug`**, then **`pip install -e ".[dev]"`** again if entry points changed. The script is under **`$CONDA_PREFIX/bin/googleads-invoice`** on Unix; you can call **`python -m googleads_invoice ...`** if **`PATH`** is wrong.
@@ -143,6 +153,9 @@ HEADLESS_E2E=1 RUN_E2E=1 pytest -m e2e
 
 ```bash
 export RUN_LIVE_BRAVE=1
+# optional: save page HTML + screenshot after navigation (default dir: ~/Downloads)
+# export RUN_LIVE_BRAVE_TRACE=1
+# export GOOGLEADS_LIVE_BRAVE_TRACE_DIR="$HOME/Downloads"
 export GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222
 export GOOGLEADS_BILLING_DEEPLINK='https://c.gle/...'   # from mail; do not commit
 pytest -m live_brave tests/test_live_brave_billing.py -q

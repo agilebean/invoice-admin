@@ -281,6 +281,43 @@ def test_cli_list_billing_mail_requires_oauth_token(
     assert code == 2
 
 
+@patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
+def test_cli_billing_url_from_gmail_prints_url(
+    mock_from_env: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/tok.json")
+    backend = MagicMock()
+    backend.list_messages.return_value = [
+        GmailMessageSummary(id="mid1", thread_id="tid", snippet="s"),
+    ]
+    backend.get_message_html.return_value = (
+        '<html><body><a href="https://payments.google.com/billing/x">v</a></body></html>'
+    )
+    mock_from_env.return_value = backend
+    code = main(["billing-url-from-gmail", "--max-scan", "1"])
+    assert code == 0
+    out = capsys.readouterr().out.strip()
+    assert out == "https://payments.google.com/billing/x"
+
+
+@patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
+def test_cli_billing_url_from_gmail_exits_1_when_not_found(
+    mock_from_env: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/tok.json")
+    backend = MagicMock()
+    backend.list_messages.return_value = [
+        GmailMessageSummary(id="m1", thread_id="t", snippet=""),
+    ]
+    backend.get_message_html.return_value = "<html><body>no links</body></html>"
+    mock_from_env.return_value = backend
+    code = main(["billing-url-from-gmail"])
+    assert code == 1
+
+
 @patch("googleads_invoice.cli.GmailFacade")
 @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
 def test_cli_list_billing_mail_prints_rows(

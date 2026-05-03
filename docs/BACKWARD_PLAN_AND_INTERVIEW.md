@@ -4,18 +4,20 @@
 
 Each slice has **acceptance on your Mac** where apps are involved; CI keeps **fast mocks + fixtures**.
 
-**How this file uses Markdown:** Use **double asterisks** only *outside* of `` `backticks` `` for bold. Inside `` `...` ``, text is monospace and **not** parsed for bold—so `` `**foo**` `` would show the stars literally (that was the bug). *Triple asterisks* (`***text***`) mean **bold and italic** together in normal prose; avoid mixing them with `` `code` `` spans.
+**How this file uses Markdown:** Use **double asterisks** only *outside* of ``backticks`` for bold. Inside ``...``, text is monospace and **not** parsed for bold—so ``**foo**`` would show the stars literally (that was the bug). *Triple asterisks* (`***text**`*) mean **bold and italic** together in normal prose; avoid mixing them with ``code`` spans.
 
 ---
 
 ## Implementation order (do steps in this sequence)
 
-| Step | Outcome (what “done” looks like) | Likely slice / tech |
-|------|----------------------------------|---------------------|
-| **1** | Send **one** email from `chaehan.so@gmail.com` with **PDF attachment** (bytes from `tests/fixtures/pdf/invoice_eur_dot_decimal.pdf`); subject/body from `build_email_*` + billing month. | **Shipped:** `googleads-invoice send-test-pdf` + `SmtpGmailBackend` (`GOOGLEADS_GMAIL_SMTP_*`, `GOOGLEADS_CONFIRM_TEST_SEND=1`). See **PLAN §10.1**. |
-| **2** | **Same** test email (subject/body + PDF) in **Mail.app** (visible draft) so you can **Send** from the Mac MUA or duplicate into **Spark**—matching how Jack sees it. | **Shipped:** `googleads-invoice mail-app-draft` (`GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1`, macOS + Mail.app). |
-| **3** | Find **Google Ads billing notification** in mail: `payments-noreply@google.com`, subject contains “Google Ads: Your billing document is ready” — **Gmail API** `q=` search (and/or Spark export + `extract_billing_url`). | **Shipped (API list):** `googleads-invoice list-billing-mail`. Deeper “open message / pull HTML” can extend this step. |
-| **4** | Open billing **Documents** in **real Brave**, identify URLs/UI (what Selenium must target). | `live_brave`, logging, trace saves under `~/Downloads` when enabled — see interview **D3** / **PLAN §10.4**. |
+
+| Step  | Outcome (what “done” looks like)                                                                                                                                                                                          | Likely slice / tech                                                                                                                                  |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | Send **one** email from `chaehan.so@gmail.com` with **PDF attachment** (bytes from `tests/fixtures/pdf/invoice_eur_dot_decimal.pdf`); subject/body from `build_email_*` + billing month.                                  | **Shipped:** `googleads-invoice send-test-pdf` + `SmtpGmailBackend` (`GOOGLEADS_GMAIL_SMTP_*`, `GOOGLEADS_CONFIRM_TEST_SEND=1`). See **PLAN §10.1**. |
+| **2** | **Same** test email (subject/body + PDF) in **Mail.app** (visible draft) so you can **Send** from the Mac MUA or duplicate into **Spark**—matching how Jack sees it.                                                      | **Shipped:** `googleads-invoice mail-app-draft` (`GOOGLEADS_CONFIRM_MAIL_APP_DRAFT=1`, macOS + Mail.app).                                            |
+| **3** | Find **Google Ads billing notification** in mail: `payments-noreply@google.com`, subject contains “Google Ads: Your billing document is ready” — **Gmail API** `q=` search (and/or Spark export + `extract_billing_url`). | **Shipped:** `list-billing-mail`, `**billing-url-from-gmail`** (fetch HTML → print billing URL).                                                     |
+| **4** | Open billing **Documents** in **real Brave**, identify URLs/UI (what Selenium must target).                                                                                                                               | `**live_brave`** + optional `**RUN_LIVE_BRAVE_TRACE=1**` (HTML + PNG under `~/Downloads` or `**GOOGLEADS_LIVE_BRAVE_TRACE_DIR**`).                   |
+
 
 ---
 
@@ -57,14 +59,16 @@ Each slice has **acceptance on your Mac** where apps are involved; CI keeps **fa
 
 Captured from the structured interview in Cursor; use this as the working default until changed.
 
-| Topic | Decision |
-|-------|----------|
-| **SMTP secret** | Gmail **app password** via `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` (first line of a local file; `chmod 600`; never commit). Inline `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD` remains supported; file wins when both are set. |
-| **Attachment filename** | Default attachment name follows `build_renamed_pdf_filename` (same as production / dry-run naming); optional `--attachment-name` override. |
-| **Steps 2–3 (Mac mail + inbox search)** | **Evaluate** Mail.app, Spark UI, and Gmail API (`q=` search); **pick the simplest** path for the next slice (no fixed winner yet). |
-| **Brave / trace artifacts** | Prefer `~/Downloads` for saved HTML/screenshots when tracing — **not** `./artifacts/` by default. |
-| **Jack / production guard** | **No** separate env gate for Jack’s address beyond what `send-test-pdf` already requires `GOOGLEADS_CONFIRM_TEST_SEND=1`; treat recipient choice as manual discipline. |
-| **Canonical addresses** | **From:** `chaehan.so@gmail.com` (default SMTP user if unset). **Default To** when `--to` omitted: `chaehan.so@virtualfriend.chat`, overridable with `GOOGLEADS_INVOICE_TO` (e.g. `jack.copeland@theglugglejugfactory.com` for monthly send). |
+
+| Topic                                   | Decision                                                                                                                                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SMTP secret**                         | Gmail **app password** via `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` (first line of a local file; `chmod 600`; never commit). Inline `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD` remains supported; file wins when both are set.                       |
+| **Attachment filename**                 | Default attachment name follows `build_renamed_pdf_filename` (same as production / dry-run naming); optional `--attachment-name` override.                                                                                                    |
+| **Steps 2–3 (Mac mail + inbox search)** | **Evaluate** Mail.app, Spark UI, and Gmail API (`q=` search); **pick the simplest** path for the next slice (no fixed winner yet).                                                                                                            |
+| **Brave / trace artifacts**             | Prefer `~/Downloads` for saved HTML/screenshots when tracing — **not** `./artifacts/` by default.                                                                                                                                             |
+| **Jack / production guard**             | **No** separate env gate for Jack’s address beyond what `send-test-pdf` already requires `GOOGLEADS_CONFIRM_TEST_SEND=1`; treat recipient choice as manual discipline.                                                                        |
+| **Canonical addresses**                 | **From:** `chaehan.so@gmail.com` (default SMTP user if unset). **Default To** when `--to` omitted: `chaehan.so@virtualfriend.chat`, overridable with `GOOGLEADS_INVOICE_TO` (e.g. `jack.copeland@theglugglejugfactory.com` for monthly send). |
+
 
 ---
 
@@ -72,3 +76,16 @@ Captured from the structured interview in Cursor; use this as the working defaul
 
 - Update **PLAN.md** Iteration 10+ (or expand 9.x) with **your** accepted queries and **Definition of Done** per step.
 - Extend **docs/CONSTRAINTS_AND_WORKAROUNDS.md** if a new constraint row (e.g. **C4**, **B1**) appears.
+
+---
+
+## Google Cloud Console UI update (2026)
+
+The **OAuth consent screen** is now at **Google Auth Platform → Data Access**:
+
+- **Add scopes** (e.g. `https://www.googleapis.com/auth/gmail.readonly`) under **Google Auth Platform → Data Access → Add Scopes**.
+- **Add test users** (e.g. `chaehan.so@gmail.com`) under **Google Auth Platform → Data Access → Audience → Test users → Add users**.
+- Keep the app in **Testing** mode (no need to publish); publishing requires a security review.
+
+**Token generation:** run `python scripts/get_gmail_token.py` after setting up scopes + test users.
+

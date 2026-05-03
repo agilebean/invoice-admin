@@ -6,6 +6,7 @@ Send still uses :class:`~googleads_invoice.gmail_smtp.SmtpGmailBackend` — this
 
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 
@@ -25,6 +26,38 @@ DEFAULT_BILLING_MAIL_QUERY = (
 _SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
 
 
+def _urlsafe_b64decode(data: str) -> bytes:
+    pad = (4 - len(data) % 4) % 4
+    return base64.urlsafe_b64decode(data + ("=" * pad))
+
+
+def _html_from_part_body(part: dict) -> str | None:
+    body = part.get("body") or {}
+    raw = body.get("data")
+    if not raw:
+        return None
+    try:
+        return _urlsafe_b64decode(raw).decode("utf-8", errors="replace")
+    except (ValueError, TypeError):
+        return None
+
+
+def html_from_gmail_message_payload(payload: dict) -> str | None:
+    """First ``text/html`` body in a Gmail API ``payload`` tree, or ``None``."""
+    if (payload.get("mimeType") or "").lower() == "text/html":
+        h = _html_from_part_body(payload)
+        if h:
+            return h
+    for part in payload.get("parts") or []:
+        mt = (part.get("mimeType") or "").lower()
+        if mt == "text/html":
+            html = _html_from_part_body(part)
+            if html:
+                return html
+        nested = html_from_gmail_message_payload(part)
+        if nested:
+            return nested
+    return None
 def billing_mail_query_from_env() -> str:
     """Return ``GOOGLEADS_GMAIL_BILLING_QUERY`` if set, else :data:`DEFAULT_BILLING_MAIL_QUERY`."""
     raw = os.environ.get("GOOGLEADS_GMAIL_BILLING_QUERY", "").strip()
@@ -102,6 +135,26 @@ class GmailApiReadBackend:
                     )
                 )
             return out
+        except HttpError as e:
+            raise GmailTransportError(f"Gmail API error: {e}") from e
+
+    def get_message_html(self, message_id: str) -> str:
+        """Fetch ``format=full`` and return the first ``text/html`` body."""
+        try:
+            service = self._service()
+            full = (
+                service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+                .execute()
+            )
+            payload = full.get("payload") or {}
+            html = html_from_gmail_message_payload(payload)
+            if not html:
+                raise GmailTransportError(
+                    f"No text/html part in Gmail message {message_id!r}."
+                )
+            return html
         except HttpError as e:
             raise GmailTransportError(f"Gmail API error: {e}") from e
 

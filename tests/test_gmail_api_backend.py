@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from googleads_invoice.billing_url import extract_billing_url
 from googleads_invoice.gmail_api_backend import (
     DEFAULT_BILLING_MAIL_QUERY,
     GmailApiReadBackend,
     billing_mail_query_from_env,
+    html_from_gmail_message_payload,
 )
 from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
 
@@ -49,6 +52,42 @@ def test_from_token_path_wraps_refresh_failure(
     creds.refresh = MagicMock(side_effect=boom)
     with pytest.raises(ValueError, match="Could not refresh"):
         GmailApiReadBackend.from_token_path(p)
+
+
+def test_html_from_gmail_payload_multipart_alternative() -> None:
+    html = '<a href="https://payments.google.com/inv">pay</a>'
+    b64 = base64.urlsafe_b64encode(html.encode()).decode().rstrip("=")
+    payload = {
+        "mimeType": "multipart/alternative",
+        "parts": [
+            {"mimeType": "text/plain", "body": {"data": "cGk="}},
+            {"mimeType": "text/html", "body": {"data": b64}},
+        ],
+    }
+    raw = html_from_gmail_message_payload(payload)
+    assert raw is not None
+    assert extract_billing_url(raw) == "https://payments.google.com/inv"
+
+
+@patch("googleads_invoice.gmail_api_backend.build")
+def test_get_message_html_uses_full_format(mock_build: MagicMock) -> None:
+    html = '<a href="https://pay.google.com/x">y</a>'
+    b64 = base64.urlsafe_b64encode(html.encode()).decode().rstrip("=")
+    mock_service = MagicMock()
+    mock_build.return_value = mock_service
+    get_chain = mock_service.users.return_value.messages.return_value.get.return_value
+    get_chain.execute.return_value = {
+        "id": "m2",
+        "payload": {"mimeType": "text/html", "body": {"data": b64}},
+    }
+    backend = GmailApiReadBackend(credentials=MagicMock())
+    out = backend.get_message_html("m2")
+    assert extract_billing_url(out) == "https://pay.google.com/x"
+    mock_service.users.return_value.messages.return_value.get.assert_called_once_with(
+        userId="me",
+        id="m2",
+        format="full",
+    )
 
 
 @patch("googleads_invoice.gmail_api_backend.build")

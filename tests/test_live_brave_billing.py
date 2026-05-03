@@ -11,6 +11,7 @@ import pytest
 from selenium.webdriver.support.ui import WebDriverWait
 
 from googleads_invoice.browser_download import chrome_driver_attach
+from googleads_invoice.live_brave_trace import maybe_save_live_brave_trace
 
 
 @pytest.mark.live_brave
@@ -28,5 +29,9 @@ def test_live_brave_billing_deeplink_reaches_documents_page() -> None:
             lambda d: "billing/documents" in d.current_url.lower(),
         )
         assert "ads.google.com" in driver.current_url.lower(), driver.current_url
+        maybe_save_live_brave_trace(driver, label="billing_documents")
+    except BaseException:
+        maybe_save_live_brave_trace(driver, label="billing_documents_failed")
+        raise
     finally:
         driver.quit()

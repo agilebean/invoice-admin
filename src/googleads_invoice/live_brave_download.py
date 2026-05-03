@@ -1,0 +1,152 @@
+"""Attach to a running Brave instance, navigate the billing deeplink, and download the invoice PDF.
+
+Step 4 of the monthly flow: identify the billing Documents page UI and download the
+most recent invoice. Also saves an HTML+PNG trace for DOM identification when the
+download button can't be located automatically.
+
+Usage
+-----
+1. Start Brave with remote debugging::
+
+       "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \\
+           --remote-debugging-port=9222
+
+2. Run::
+
+       GOOGLEADS_CONFIRM_LIVE_BRAVE=1 \\
+           GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222 \\
+           GOOGLEADS_BILLING_DEEPLINK="https://c.gle/..." \\
+           googleads-invoice live-brave-download
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from pathlib import Path
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from googleads_invoice.browser_download import chrome_driver_attach
+from googleads_invoice.live_brave_trace import save_live_brave_trace
+
+
+class LiveBraveDownloadError(RuntimeError):
+    """Raised when the Brave download flow fails (navigation, click, or timeout)."""
+
+
+def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
+    """Try strategies to find a download element on the billing Documents page.
+
+    Strategies (in order):
+    1. ``aria-label`` containing "Download File" or "Download" on a row.
+    2. Visible ``<a>`` or ``<button>`` with text containing "Download".
+    3. ``[jsaction]`` or ``[role=button]`` with download-related attributes.
+
+    Returns the element if found; raises :exc:`LiveBraveDownloadError` otherwise.
+    """
+    selectors: list[str] = [
+        # Google Ads often uses aria-labels on clickable rows
+        '//*[starts-with(@aria-label, "Download")]',
+        # Explicit link/button with Download text
+        '//a[contains(text(), "Download")]',
+        '//button[contains(text(), "Download")]',
+        '//span[contains(text(), "Download")]',
+        # Material Design icon buttons
+        '//*[@role="button" and contains(@aria-label, "Download")]',
+    ]
+    for xpath in selectors:
+        elements = driver.find_elements(By.XPATH, xpath)
+        visible = [el for el in elements if el.is_displayed()]
+        if visible:
+            return visible[0]
+    raise LiveBraveDownloadError(
+        "No download button found on billing Documents page. "
+        "A full HTML + PNG trace has been saved — inspect it to identify the correct "
+        "selector, then update _find_download_on_documents_page()."
+    )
+
+
+def live_brave_download_pdf(
+    *,
+    debugger_address: str,
+    deeplink_url: str,
+    download_dir: Path,
+    navigation_timeout_s: float = 45,
+    download_timeout_s: float = 60,
+) -> Path:
+    """Attach to Brave, navigate the billing deeplink, click Download, return local PDF path.
+
+    Steps
+    -----
+    1. Attach WebDriver to the running Brave via ``debugger_address``.
+    2. Navigate to ``deeplink_url`` (typically a ``c.gle`` short link that redirects
+       to the Google Ads billing Documents page).
+    3. Wait for ``billing/documents`` to appear in the URL.
+    4. Save an HTML + PNG trace to ``download_dir`` (or ``~/Downloads``) for
+       identification when the download button can't be located.
+    5. Find and click the Download element on the top row.
+    6. Wait for a new ``.pdf`` to appear in ``download_dir``.
+    7. Return the path to the downloaded PDF.
+
+    Raises
+    ------
+    LiveBraveDownloadError
+        If navigation, element finding, or download times out.
+    """
+    download_dir = download_dir.expanduser().resolve()
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    before = {p.resolve() for p in download_dir.glob("*.pdf")}
+
+    driver = chrome_driver_attach(
+        debugger_address=debugger_address,
+        download_dir=download_dir,
+    )
+    try:
+        driver.get(deeplink_url)
+        try:
+            WebDriverWait(driver, navigation_timeout_s).until(
+                lambda d: "billing/documents" in (d.current_url or "").lower(),
+            )
+        except Exception as exc:
+            trace_paths = save_live_brave_trace(driver, label="billing_nav_failed")
+            raise LiveBraveDownloadError(
+                f"Navigation timed out waiting for billing/documents after "
+                f"{navigation_timeout_s}s.\n"
+                f"Trace saved: {trace_paths[0]}, {trace_paths[1]}\n"
+                f"Current URL: {driver.current_url!r}"
+            ) from exc
+
+        try:
+            download_el = _find_download_on_documents_page(driver)
+        except LiveBraveDownloadError:
+            trace_paths = save_live_brave_trace(driver, label="billing_no_download_btn")
+            raise LiveBraveDownloadError(
+                f"Reached billing/documents but couldn't locate the Download element.\n"
+                f"Trace saved: {trace_paths[0]}, {trace_paths[1]}\n"
+                f"Inspect the HTML + screenshot, then update "
+                f"_find_download_on_documents_page() selectors."
+            )
+
+        download_el.click()
+
+        deadline = time.monotonic() + download_timeout_s
+        while time.monotonic() < deadline:
+            after = {p.resolve() for p in download_dir.glob("*.pdf")}
+            new = after - before
+            if new:
+                return max(new, key=lambda p: p.stat().st_mtime)
+            time.sleep(0.3)
+
+        trace_paths = save_live_brave_trace(driver, label="billing_download_timeout")
+        raise LiveBraveDownloadError(
+            f"Clicked Download but no new PDF appeared in {download_dir} within "
+            f"{download_timeout_s}s.\n"
+            f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
+        )
+    finally:
+        driver.quit()
