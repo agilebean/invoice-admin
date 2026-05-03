@@ -61,6 +61,7 @@ class TestFindDownloadOnDocumentsPage:
     def test_raises_live_brave_download_error_when_nothing_found(self) -> None:
         driver = MagicMock()
         driver.find_elements.return_value = []
+        driver.execute_script.return_value = None  # JS fallback returns nothing
         with pytest.raises(
             LiveBraveDownloadError,
             match="No download button found",
@@ -81,6 +82,7 @@ class TestFindDownloadOnDocumentsPage:
         driver = MagicMock()
         hidden = make_mock_element(displayed=False)
         driver.find_elements.return_value = [hidden]
+        driver.execute_script.return_value = None  # JS fallback returns nothing
         with pytest.raises(LiveBraveDownloadError):
             _find_download_on_documents_page(driver)
 
@@ -191,6 +193,7 @@ class TestLiveBraveDownloadPdf:
         mock_driver.page_source = "<html>no download</html>"
         mock_driver.save_screenshot = MagicMock()
         mock_driver.find_elements.return_value = []  # no Download element
+        mock_driver.execute_script.return_value = None  # JS fallback returns nothing
 
         with (
             patch(

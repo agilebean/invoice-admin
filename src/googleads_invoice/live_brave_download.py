@@ -51,18 +51,38 @@ def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
     selectors: list[str] = [
         # Google Ads often uses aria-labels on clickable rows
         '//*[starts-with(@aria-label, "Download")]',
-        # Explicit link/button with Download text
+        # Explicit link/button/span with Download text
         '//a[contains(text(), "Download")]',
         '//button[contains(text(), "Download")]',
         '//span[contains(text(), "Download")]',
+        '//div[contains(text(), "Download")]',
+        # Any element with Download text inside a table cell
+        '//td[contains(text(), "Download")]',
         # Material Design icon buttons
         '//*[@role="button" and contains(@aria-label, "Download")]',
+        # Elements with download-related aria-label anywhere
+        '//*[contains(@aria-label, "Download file")]',
+        '//*[contains(@aria-label, "download")]',
     ]
     for xpath in selectors:
         elements = driver.find_elements(By.XPATH, xpath)
         visible = [el for el in elements if el.is_displayed()]
         if visible:
             return visible[0]
+    # Last resort: try finding any element with "Download" text case-insensitively
+    js_code = r"""
+    let els = document.querySelectorAll('*');
+    for (let el of els) {
+        if (el.children.length === 0 && el.textContent.trim() === 'Download') {
+            return el;
+        }
+    }
+    return null;
+    """
+    result = driver.execute_script(js_code)
+    if result is not None:
+        return result
+
     raise LiveBraveDownloadError(
         "No download button found on billing Documents page. "
         "A full HTML + PNG trace has been saved — inspect it to identify the correct "
@@ -120,6 +140,14 @@ def live_brave_download_pdf(
                 f"Trace saved: {trace_paths[0]}, {trace_paths[1]}\n"
                 f"Current URL: {driver.current_url!r}"
             ) from exc
+
+        # Wait for dynamically rendered content (React/SPA table)
+        try:
+            WebDriverWait(driver, 15).until(
+                lambda d: "Download" in (d.page_source or "")
+            )
+        except Exception:
+            pass  # proceed anyway, _find may still work
 
         try:
             download_el = _find_download_on_documents_page(driver)
