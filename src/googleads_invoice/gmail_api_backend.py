@@ -16,7 +16,7 @@ from googleapiclient.errors import HttpError
 
 from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
 
-_ENV_OAUTH_TOKEN = "GOOGLEADS_GMAIL_OAUTH_TOKEN"
+_ENV_OAUTH_TOKEN = "GOOGLEADS_OAUTH_TOKEN"
 
 # Gmail search for the monthly billing notification (tune in one place).
 DEFAULT_BILLING_MAIL_QUERY = (

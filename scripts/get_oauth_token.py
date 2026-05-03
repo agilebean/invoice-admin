@@ -52,7 +52,7 @@ def _resolve_path(prompt: str, *, must_exist: bool, default: str | None = None) 
 
 def main() -> int:
     print("=" * 60)
-    print("Gmail API read-only token generator")
+    print("Google API OAuth token generator (Gmail + Google Ads)")
     print("=" * 60)
     print()
 
@@ -73,7 +73,7 @@ def main() -> int:
         default="~/Downloads/client_secret.json",
     )
 
-    default_token = Path.home() / ".gmail" / "gmail_readonly_token.json"
+    default_token = Path.home() / ".googleads" / "oauth_token.json"
     print()
     print(
         f"Token output path (default: {default_token}):"
@@ -105,10 +105,11 @@ def main() -> int:
     print(f"   File: {token_out}")
     print()
     print("Export this in your shell profile (~/.bash_profile, ~/.zshrc, etc.):")
-    print(f'   export GOOGLEADS_GMAIL_OAUTH_TOKEN="{token_out}"')
+    print(f'   export GOOGLEADS_OAUTH_TOKEN="{token_out}"')
     print()
     print("Then verify it works:")
     print("   googleads-invoice list-billing-mail")
+    print("   googleads-invoice api-download --deeplink \"https://c.gle/...\"")
     print()
 
     return 0

@@ -16,7 +16,7 @@ Setup
     The new token will have both ``gmail.readonly`` and ``adwords`` scopes.
 
 3.  That's it — ``googleads-invoice run-month --download-method api`` will
-    use the same ``GOOGLEADS_GMAIL_OAUTH_TOKEN`` env var.
+    use the same ``GOOGLEADS_OAUTH_TOKEN`` env var.
 
 Strategy
 --------

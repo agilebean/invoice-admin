@@ -294,7 +294,7 @@ class TestCliRunMonth:
         from googleads_invoice.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
         monkeypatch.delenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", raising=False)
@@ -307,7 +307,7 @@ class TestCliRunMonth:
         from googleads_invoice.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
@@ -329,7 +329,7 @@ class TestCliRunMonth:
         from googleads_invoice.run_month import RunMonthReport
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
@@ -367,7 +367,7 @@ class TestCliRunMonth:
         from googleads_invoice.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
@@ -390,7 +390,7 @@ class TestCliRunMonth:
         from googleads_invoice.addresses import DEFAULT_TEST_RECIPIENT
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")

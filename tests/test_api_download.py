@@ -234,7 +234,7 @@ class TestCliApiDownload:
     ) -> None:
         monkeypatch.setenv("GOOGLEADS_CONFIRM_API_DOWNLOAD", "1")
         monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "https://c.gle/abc")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         mock_from_env.return_value = MagicMock()
 
         pdf = tmp_path / "invoice.pdf"
@@ -257,7 +257,7 @@ class TestCliApiDownload:
     ) -> None:
         monkeypatch.setenv("GOOGLEADS_CONFIRM_API_DOWNLOAD", "1")
         monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "should-not-win")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         mock_from_env.return_value = MagicMock()
 
         pdf = tmp_path / "invoice.pdf"
@@ -282,7 +282,7 @@ class TestCliApiDownload:
     ) -> None:
         monkeypatch.setenv("GOOGLEADS_CONFIRM_API_DOWNLOAD", "1")
         monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "https://c.gle/abc")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
 
         mock_from_env.return_value = MagicMock()
 
@@ -315,7 +315,7 @@ class TestRunMonthApiDownload:
         from googleads_invoice.run_month import RunMonthReport
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_OAUTH_TOKEN", "/tmp/dummy.json")
+        monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)

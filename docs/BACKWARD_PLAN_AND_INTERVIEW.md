@@ -89,5 +89,5 @@ The **OAuth consent screen** is now at **Google Auth Platform → Data Access**:
 - **Add test users** (e.g. `chaehan.so@gmail.com`) under **Google Auth Platform → Data Access → Audience → Test users → Add users**.
 - Keep the app in **Testing** mode (no need to publish); publishing requires a security review.
 
-**Token generation:** run `python scripts/get_gmail_token.py` after setting up scopes + test users.
+**Token generation:** run `python scripts/get_oauth_token.py` after setting up scopes + test users.
 
