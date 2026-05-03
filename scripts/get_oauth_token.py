@@ -73,7 +73,7 @@ def main() -> int:
         default="~/Downloads/client_secret.json",
     )
 
-    default_token = Path.home() / ".googleads" / "oauth_token.json"
+    default_token = Path.home() / ".google" / "oauth_token.json"
     print()
     print(
         f"Token output path (default: {default_token}):"

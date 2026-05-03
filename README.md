@@ -37,7 +37,7 @@ googleads-invoice
 
 ```bash
 # Set env vars once per terminal:
-export GOOGLEADS_OAUTH_TOKEN="$HOME/.googleads/oauth_token.json"
+export GOOGLEADS_OAUTH_TOKEN="$HOME/.google/oauth_token.json"
 export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail/gmail-smtp-app-password"
 export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 
