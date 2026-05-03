@@ -285,10 +285,16 @@ def live_brave_download_pdf(
                 return max(new, key=lambda p: p.stat().st_mtime)
             time.sleep(0.3)
 
+        # If no new PDF found in the target dir, scan more broadly
+        all_pdfs = sorted(download_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+        recent = [p for p in all_pdfs if p.stat().st_mtime > time.monotonic() - 120][:5]
+        recent_info = "\n  ".join(f"{p.name} ({p.stat().st_size} bytes, modified {p.stat().st_mtime:.0f})" for p in recent)
+
         trace_paths = save_live_brave_trace(driver, label="billing_download_timeout")
         raise LiveBraveDownloadError(
             f"Clicked Download but no new PDF appeared in {download_dir} within "
             f"{download_timeout_s}s.\n"
+            f"Recent PDFs in {download_dir}:\n  {recent_info}\n"
             f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
         )
     finally:
