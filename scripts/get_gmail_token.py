@@ -15,9 +15,9 @@ You need a **client_secret.json** from Google Cloud Console first:
 5. The script writes a **read-only token file** that the CLI's
    ``GOOGLEADS_GMAIL_OAUTH_TOKEN`` env var points to.
 
-The token grants **read-only** access (``gmail.readonly``):
-can search inbox and download message bodies — **cannot** send, delete, or
-modify any mail.
+The token grants **read-only** access (``gmail.readonly``) and **Google Ads**
+access (``adwords``): can search inbox, download message bodies, and
+access the Google Ads billing API for invoice downloads.
 """
 
 from __future__ import annotations
@@ -26,7 +26,10 @@ import json
 import sys
 from pathlib import Path
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/adwords",
+]
 
 
 def _resolve_path(prompt: str, *, must_exist: bool, default: str | None = None) -> Path:
@@ -82,7 +85,8 @@ def main() -> int:
 
     print()
     print(f"Opening browser for {secrets} ...")
-    print(f"Scope: {SCOPES[0]}")
+    for s in SCOPES:
+        print(f"  Scope: {s}")
     print("Log in as chaehan.so@gmail.com and click Allow.")
     print()
 
