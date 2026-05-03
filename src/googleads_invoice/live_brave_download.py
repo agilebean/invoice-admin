@@ -177,18 +177,22 @@ def live_brave_download_pdf(
         try:
             download_el = _find_download_on_documents_page(driver)
         except LiveBraveDownloadError:
-            # Diagnostic: dump page info to understand the DOM
+            # Diagnostic: find elements containing 'Download' or 'Invoice' or 'Document'
             try:
                 diag = driver.execute_script(
                     "let items = []; "
                     "document.querySelectorAll('*').forEach(el => {"
                     "  let t = (el.textContent || '').trim(); "
-                    "  if (t && t.length < 100 && t.length > 0) items.push(el.tagName + ':' + t.slice(0, 80));"
-                    "}); return items.slice(0, 100);"
+                    "  if (t && (t.includes('Download') || t.includes('Invoice') || t.includes('Document'))) {"
+                    "    items.push(el.tagName + '#' + (el.id || '') + '.' + (el.className || '').slice(0, 40) + ':' + t.slice(0, 120));"
+                    "  }"
+                    "}); return items;"
                 )
-                diag_text = "\n".join(f"  {x}" for x in (diag or []))
-            except Exception:
-                diag_text = "(diagnostic failed)"
+                diag_text = "\n".join(f"  [{i}] {x}" for i, x in enumerate(diag or []))
+                if not diag_text:
+                    diag_text = "(no elements with Download/Invoice/Document text found)"
+            except Exception as exc:
+                diag_text = f"(diagnostic failed: {exc})"
             trace_paths = save_live_brave_trace(driver, label="billing_no_download_btn")
             raise LiveBraveDownloadError(
                 f"Reached billing/documents but couldn't locate the Download element.\n"
