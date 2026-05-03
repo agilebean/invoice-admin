@@ -280,7 +280,7 @@ def test_cli_send_test_pdf_with_password_file(
 def test_cli_list_billing_mail_requires_oauth_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("GOOGLEADS_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
     code = main(["list-billing-mail"])
     assert code == 2
 
@@ -291,7 +291,7 @@ def test_cli_billing_url_from_gmail_prints_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/tok.json")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/tok.json")
     backend = MagicMock()
     backend.list_messages.return_value = [
         GmailMessageSummary(id="mid1", thread_id="tid", snippet="s"),
@@ -311,7 +311,7 @@ def test_cli_billing_url_from_gmail_exits_1_when_not_found(
     mock_from_env: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/tok.json")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/tok.json")
     backend = MagicMock()
     backend.list_messages.return_value = [
         GmailMessageSummary(id="m1", thread_id="t", snippet=""),
@@ -330,7 +330,7 @@ def test_cli_list_billing_mail_prints_rows(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setenv("GOOGLEADS_OAUTH_TOKEN", "/tmp/dummy.json")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
     mock_from_env.return_value = object()
     facade = MagicMock()
     facade.list_messages.return_value = [

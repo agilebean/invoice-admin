@@ -14,7 +14,7 @@ pip install -e ".[dev,oauth]"
 
 | What | How | Env var |
 |------|-----|---------|
-| Google API OAuth token (Gmail + Ads) | `python scripts/get_oauth_token.py` | `GOOGLEADS_OAUTH_TOKEN` |
+| Google API OAuth token (Gmail + Ads) | `python scripts/get_oauth_token.py` | `GOOGLE_OAUTH_TOKEN` |
 | SMTP app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → save to `~/.gmail/gmail-smtp-app-password` | `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` |
 
 > **Send Email:** the VPN must unblock the sender address as bypasser website: `https://smtp.gmail.com`
@@ -37,7 +37,7 @@ googleads-invoice
 
 ```bash
 # Set env vars once per terminal:
-export GOOGLEADS_OAUTH_TOKEN="$HOME/.google/oauth_token.json"
+export GOOGLE_OAUTH_TOKEN="$HOME/.google/oauth_token.json"
 export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail/gmail-smtp-app-password"
 export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 

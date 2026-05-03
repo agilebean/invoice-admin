@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""One-time OAuth token generator for the Gmail API read-only backend.
+"""One-time OAuth token generator for Google APIs (Gmail + Google Ads).
 
 Usage
 -----
     pip install -e ".[oauth]"           # if you haven't already
-    python scripts/get_gmail_token.py
+    python scripts/get_oauth_token.py
 
-You need a **client_secret.json** from Google Cloud Console first:
+1. Go to https://console.cloud.google.com/
+2. Enable **Gmail API** and **Google Ads API**
+3. Add both scopes to OAuth consent screen:
+   - ``https://www.googleapis.com/auth/gmail.readonly``
+   - ``https://www.googleapis.com/auth/adwords``
+4. Create OAuth credentials → **Desktop app** → download JSON
+5. Run this script, paste the path to that JSON when prompted
 
-1. Go to https://console.cloud.google.com/ → create a project (or pick one).
-2. Enable the **Gmail API** (APIs & Services → Library → search "Gmail API").
-3. Create OAuth credentials → **Desktop app** type → download the JSON.
-4. Run this script, paste the path to that JSON when prompted.
-5. The script writes a **read-only token file** that the CLI's
-   ``GOOGLEADS_GMAIL_OAUTH_TOKEN`` env var points to.
-
-The token grants **read-only** access (``gmail.readonly``) and **Google Ads**
-access (``adwords``): can search inbox, download message bodies, and
-access the Google Ads billing API for invoice downloads.
+The token grants:
+- Gmail read-only access (search inbox, download messages)
+- Google Ads billing access
 """
 
 from __future__ import annotations
@@ -105,11 +104,10 @@ def main() -> int:
     print(f"   File: {token_out}")
     print()
     print("Export this in your shell profile (~/.bash_profile, ~/.zshrc, etc.):")
-    print(f'   export GOOGLEADS_OAUTH_TOKEN="{token_out}"')
+    print(f'   export GOOGLE_OAUTH_TOKEN="{token_out}"')
     print()
     print("Then verify it works:")
     print("   googleads-invoice list-billing-mail")
-    print("   googleads-invoice api-download --deeplink \"https://c.gle/...\"")
     print()
 
     return 0
