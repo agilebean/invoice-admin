@@ -17,7 +17,7 @@ pip install -e ".[dev,oauth]"
 | Gmail API token (read-only) | `python scripts/get_gmail_token.py` | `GOOGLEADS_GMAIL_OAUTH_TOKEN` |
 | SMTP app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → save to `~/.gmail/gmail-smtp-app-password` | `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` |
 
-> **VPN:** add `https://smtp.gmail.com` as bypasser website in your VPN.
+> **Send Email:** the VPN must unblock the sender address as bypasser website: `https://smtp.gmail.com`
 
 ## CLI
 
