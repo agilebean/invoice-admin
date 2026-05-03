@@ -256,6 +256,21 @@ def live_brave_download_pdf(
 
         download_el.click()
 
+        # A confirmation dialog may appear after clicking Download
+        # Try to dismiss it by clicking any visible confirm button
+        try:
+            confirm_btn = WebDriverWait(driver, 5).until(
+                lambda d: d.find_element(
+                    By.XPATH,
+                    "//*[@role='dialog' or contains(@class,'modal') or "
+                    "contains(@class,'dialog') or contains(@class,'overlay')]"
+                    "//*[text()='Download' or text()='download']"
+                )
+            )
+            confirm_btn.click()
+        except Exception:
+            pass  # No confirmation dialog, or it was already handled
+
         deadline = time.monotonic() + download_timeout_s
         while time.monotonic() < deadline:
             after = {p.resolve() for p in download_dir.glob("*.pdf")}
