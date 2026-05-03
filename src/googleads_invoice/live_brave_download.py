@@ -199,16 +199,17 @@ def live_brave_download_pdf(
             except Exception as exc:
                 diag_text = f"(diagnostic failed: {exc})"
             try:
+                # Get ALL visible text elements in the main content area
                 tabs_text = driver.execute_script(
                     "let items = []; "
-                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox], [role=option], [role=combobox], mat-option, mat-select').forEach(el => {"
-                    "  let t = (el.textContent || '').trim().slice(0, 120); "
-                    "  if (t) items.push(el.tagName + '.' + (el.className || '').slice(0, 40) + ' role=' + (el.getAttribute('role') || '') + ':' + t);"
-                    "}); return items;"
+                    "document.querySelectorAll('[role=tab], [role=tabpanel], mat-tab, .mat-tab-label, .tab, button, select, [role=listbox], [role=option], [role=combobox], mat-option, mat-select, td, th, tr, table, mat-row, mat-cell, [role=row], [role=gridcell], [role=columnheader]').forEach(el => {"
+                    "  let t = (el.textContent || '').trim().slice(0, 150); "
+                    "  if (t) items.push(el.tagName + '.' + (el.className || '').slice(0, 50) + ' role=' + (el.getAttribute('role') || '') + ' visible=' + el.offsetParent !== null + ':' + t);"
+                    "}); return items.slice(0, 150);"
                 )
                 tabs_line = "\n".join(f"  {x}" for x in (tabs_text or []))
-            except Exception:
-                tabs_line = "(tabs/buttons diagnostic failed)"
+            except Exception as exc:
+                tabs_line = f"(diagnostic failed: {exc})"
             diag_text = "=== Full body text (first 3000 chars) ===\n" + (body_text or "")[:3000] + "\n\n=== Download/Invoice elements ===\n" + diag_text + "\n\n=== Tabs/buttons ===\n" + tabs_line
             trace_paths = save_live_brave_trace(driver, label="billing_no_download_btn")
             raise LiveBraveDownloadError(
