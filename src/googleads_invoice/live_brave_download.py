@@ -256,20 +256,22 @@ def live_brave_download_pdf(
 
         download_el.click()
 
-        # A confirmation dialog may appear after clicking Download
-        # Try to dismiss it by clicking any visible confirm button
+        # Switch back to default content to access window handles
+        driver.switch_to.default_content()
+
+        # The Download link opens a new tab with the document URL.
         try:
-            confirm_btn = WebDriverWait(driver, 5).until(
-                lambda d: d.find_element(
-                    By.XPATH,
-                    "//*[@role='dialog' or contains(@class,'modal') or "
-                    "contains(@class,'dialog') or contains(@class,'overlay')]"
-                    "//*[text()='Download' or text()='download']"
-                )
+            current_handles = set(driver.window_handles)
+            WebDriverWait(driver, 10).until(
+                lambda d: len(set(d.window_handles) - current_handles) > 0
             )
-            confirm_btn.click()
+            new_handles = list(set(driver.window_handles) - current_handles)
+            if new_handles:
+                driver.switch_to.window(new_handles[0])
+                # Wait a moment for the page to start the download
+                time.sleep(3)
         except Exception:
-            pass  # No confirmation dialog, or it was already handled
+            pass  # No new tab opened, or download started directly
 
         deadline = time.monotonic() + download_timeout_s
         while time.monotonic() < deadline:
