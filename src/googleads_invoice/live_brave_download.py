@@ -135,17 +135,33 @@ def live_brave_download_pdf(
     )
     try:
         driver.get(deeplink_url)
+        # Switch to the newest tab if one appeared (c.gle redirects may open new tab)
+        try:
+            handles = driver.window_handles
+            if len(handles) > 1:
+                driver.switch_to.window(handles[-1])
+        except Exception:
+            pass
+
         try:
             WebDriverWait(driver, navigation_timeout_s).until(
                 lambda d: "billing/documents" in (d.current_url or "").lower(),
             )
         except Exception as exc:
+            # Check if a new tab opened and the original tab never navigated
+            all_urls = []
+            try:
+                for h in driver.window_handles:
+                    driver.switch_to.window(h)
+                    all_urls.append(driver.current_url)
+            except Exception:
+                pass
             trace_paths = save_live_brave_trace(driver, label="billing_nav_failed")
             raise LiveBraveDownloadError(
                 f"Navigation timed out waiting for billing/documents after "
                 f"{navigation_timeout_s}s.\n"
                 f"Trace saved: {trace_paths[0]}, {trace_paths[1]}\n"
-                f"Current URL: {driver.current_url!r}"
+                f"Tab URLs: {all_urls}"
             ) from exc
 
         # Wait for dynamically rendered content (React/SPA table)
@@ -161,12 +177,23 @@ def live_brave_download_pdf(
         try:
             download_el = _find_download_on_documents_page(driver)
         except LiveBraveDownloadError:
+            # Diagnostic: dump page info to understand the DOM
+            try:
+                diag = driver.execute_script(
+                    "let items = []; "
+                    "document.querySelectorAll('*').forEach(el => {"
+                    "  let t = (el.textContent || '').trim(); "
+                    "  if (t && t.length < 100 && t.length > 0) items.push(el.tagName + ':' + t.slice(0, 80));"
+                    "}); return items.slice(0, 100);"
+                )
+                diag_text = "\n".join(f"  {x}" for x in (diag or []))
+            except Exception:
+                diag_text = "(diagnostic failed)"
             trace_paths = save_live_brave_trace(driver, label="billing_no_download_btn")
             raise LiveBraveDownloadError(
                 f"Reached billing/documents but couldn't locate the Download element.\n"
                 f"Trace saved: {trace_paths[0]}, {trace_paths[1]}\n"
-                f"Inspect the HTML + screenshot, then update "
-                f"_find_download_on_documents_page() selectors."
+                f"Rendered text snippets (first 100):\n{diag_text}"
             )
 
         download_el.click()
