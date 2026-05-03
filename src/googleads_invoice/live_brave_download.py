@@ -69,11 +69,18 @@ def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
         visible = [el for el in elements if el.is_displayed()]
         if visible:
             return visible[0]
-    # Last resort: try finding any element with "Download" text case-insensitively
+    # Last resort: scan the rendered DOM for any element whose trimmed text content is "Download"
     js_code = r"""
-    let els = document.querySelectorAll('*');
+    let els = document.querySelectorAll('a, button, span, div, td, [role="button"]');
     for (let el of els) {
-        if (el.children.length === 0 && el.textContent.trim() === 'Download') {
+        if (el.textContent.trim() === 'Download') {
+            return el;
+        }
+    }
+    // Broader search: any element containing only "Download" text (no children)
+    let all = document.querySelectorAll('*');
+    for (let el of all) {
+        if (el.textContent.trim() === 'Download' && !el.querySelector('*')) {
             return el;
         }
     }
@@ -144,7 +151,9 @@ def live_brave_download_pdf(
         # Wait for dynamically rendered content (React/SPA table)
         try:
             WebDriverWait(driver, 15).until(
-                lambda d: "Download" in (d.page_source or "")
+                lambda d: d.execute_script(
+                    "return document.documentElement.innerText.includes('Download')"
+                )
             )
         except Exception:
             pass  # proceed anyway, _find may still work
