@@ -34,10 +34,8 @@ from googleads_invoice.invoice_artifacts import (
     build_renamed_pdf_filename,
 )
 from googleads_invoice.invoice_pdf import parse_invoice_pdf
-from googleads_invoice.live_brave_download import LiveBraveDownloadError, live_brave_download_pdf
 from googleads_invoice.mail_app_draft import MailAppDraftError, open_mail_app_draft
 from googleads_invoice.pipeline import format_dry_run_report, run_dry_run
-from googleads_invoice.run_month import RunMonthError, run_month
 from googleads_invoice.save_commission_pdf import SaveCommissionPdfError, save_commission_pdf
 
 _ENV_MAIL_HTML = "GOOGLEADS_INVOICE_MAIL_HTML"
@@ -423,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
 
         try:
+            from googleads_invoice.run_month import RunMonthError, run_month
+
             report = run_month(
                 gmail_read_backend=gmail_backend,
                 billing_query=query,
@@ -484,6 +484,11 @@ def main(argv: list[str] | None = None) -> int:
             dl_dir = Path(dl_env).expanduser() if dl_env else Path.home() / "Downloads"
         else:
             dl_dir = dl_dir_raw.expanduser()
+        from googleads_invoice.live_brave_download import (
+            LiveBraveDownloadError,
+            live_brave_download_pdf,
+        )
+
         try:
             pdf_path = live_brave_download_pdf(
                 debugger_address=addr,

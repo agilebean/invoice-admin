@@ -29,10 +29,6 @@ from googleads_invoice.invoice_artifacts import (
     build_renamed_pdf_filename,
 )
 from googleads_invoice.invoice_pdf import InvoicePdfError, parse_invoice_pdf
-from googleads_invoice.live_brave_download import (
-    LiveBraveDownloadError,
-    live_brave_download_pdf,
-)
 from googleads_invoice.addresses import (
     CC_RECIPIENTS,
     BCC_RECIPIENTS,
@@ -129,6 +125,11 @@ def run_month(
         )
 
     # 2. Brave download → PDF
+    from googleads_invoice.live_brave_download import (
+        LiveBraveDownloadError,
+        live_brave_download_pdf,
+    )
+
     _step(3, "Launching Brave to download invoice PDF...")
     try:
         pdf_path = live_brave_download_pdf(

@@ -321,7 +321,7 @@ class TestCliLiveBraveDownload:
         code = main(["live-brave-download"])
         assert code == 2
 
-    @patch("googleads_invoice.cli.live_brave_download_pdf")
+    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
     def test_happy_path_calls_download(
         self,
         mock_download: MagicMock,
@@ -347,7 +347,7 @@ class TestCliLiveBraveDownload:
         )
         assert "Downloaded" in capsys.readouterr().err
 
-    @patch("googleads_invoice.cli.live_brave_download_pdf")
+    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
     def test_uses_flag_args_over_env(
         self,
         mock_download: MagicMock,
@@ -376,7 +376,7 @@ class TestCliLiveBraveDownload:
             download_dir=tmp_path / "custom",
         )
 
-    @patch("googleads_invoice.cli.live_brave_download_pdf")
+    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
     def test_propagates_live_brave_download_error(
         self,
         mock_download: MagicMock,

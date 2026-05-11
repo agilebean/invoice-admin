@@ -84,7 +84,7 @@ def test_run_month_happy_path(
     pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
-        "googleads_invoice.run_month.live_brave_download_pdf",
+        "googleads_invoice.live_brave_download.live_brave_download_pdf",
         return_value=pdf_copy,
     ):
         report = run_month(
@@ -129,7 +129,7 @@ def test_run_month_uses_auto_month_label(
     pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
-        "googleads_invoice.run_month.live_brave_download_pdf",
+        "googleads_invoice.live_brave_download.live_brave_download_pdf",
         return_value=pdf_copy,
     ):
         report = run_month(
@@ -223,7 +223,7 @@ def test_run_month_brave_download_fails(
 
     with (
         patch(
-            "googleads_invoice.run_month.live_brave_download_pdf",
+            "googleads_invoice.live_brave_download.live_brave_download_pdf",
             side_effect=RunMonthError("Brave navigation failed"),
         ),
         pytest.raises(RunMonthError, match="Brave navigation failed"),
@@ -260,7 +260,7 @@ def test_run_month_smtp_fails(
 
     with (
         patch(
-            "googleads_invoice.run_month.live_brave_download_pdf",
+            "googleads_invoice.live_brave_download.live_brave_download_pdf",
             return_value=pdf_copy,
         ),
         pytest.raises(RunMonthError, match="SMTP send failed"),
@@ -318,7 +318,7 @@ class TestCliRunMonth:
 
     @patch("builtins.input", return_value="y")
     @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
-    @patch("googleads_invoice.cli.run_month")
+    @patch("googleads_invoice.run_month.run_month")
     def test_happy_path(
         self,
         mock_run_month: MagicMock,
@@ -359,7 +359,7 @@ class TestCliRunMonth:
         assert mock_run_month.call_args.kwargs["to_address"] == "jack@example.com"
 
     @patch("builtins.input", return_value="y")
-    @patch("googleads_invoice.cli.run_month")
+    @patch("googleads_invoice.run_month.run_month")
     def test_propagates_run_month_error(
         self,
         mock_run_month: MagicMock,
@@ -400,7 +400,7 @@ class TestCliRunMonth:
         monkeypatch.delenv("GOOGLEADS_INVOICE_TO", raising=False)
         mock_from_env.return_value = MagicMock()
 
-        with patch("googleads_invoice.cli.run_month") as mock_run:
+        with patch("googleads_invoice.run_month.run_month") as mock_run:
             code = main(["run-month", "--test-run"])
             assert code == 0  # exits early via mock, but that's fine
             assert mock_run.call_args.kwargs["to_address"] == DEFAULT_TEST_RECIPIENT
