@@ -11,6 +11,7 @@ from googleads_invoice.addresses import (
     DEFAULT_GMAIL_SENDER,
     DEFAULT_TEST_RECIPIENT,
     DEFAULT_PRODUCTION_RECIPIENT,
+    DROPBOX_INVOICE_DIR,
 )
 from googleads_invoice.billing_period import (
     billing_month_label_for_previous_calendar_month,
@@ -22,6 +23,7 @@ from googleads_invoice.billing_url import (
 from googleads_invoice.gmail_api_backend import (
     GmailApiReadBackend,
     billing_mail_query_from_env,
+    commission_mail_query_from_env,
 )
 from googleads_invoice.gmail_facade import GmailFacade, GmailTransportError
 from googleads_invoice.gmail_smtp import SmtpGmailBackend
@@ -36,6 +38,7 @@ from googleads_invoice.live_brave_download import LiveBraveDownloadError, live_b
 from googleads_invoice.mail_app_draft import MailAppDraftError, open_mail_app_draft
 from googleads_invoice.pipeline import format_dry_run_report, run_dry_run
 from googleads_invoice.run_month import RunMonthError, run_month
+from googleads_invoice.save_commission_pdf import SaveCommissionPdfError, save_commission_pdf
 
 _ENV_MAIL_HTML = "GOOGLEADS_INVOICE_MAIL_HTML"
 _ENV_INVOICE_PDF = "GOOGLEADS_INVOICE_PDF"
@@ -123,7 +126,7 @@ def _subject_body_attachment_for_pdf(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="googleads-invoice")
+    parser = argparse.ArgumentParser(prog="billing-glugglejug")
     sub = parser.add_subparsers(dest="command", required=True)
 
     dry = sub.add_parser(
@@ -325,6 +328,22 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=5,
         help="Max messages to download and parse (default: 5).",
+    )
+
+    save_commission_p = sub.add_parser(
+        "save-commission-pdf",
+        help=(
+            "Search Gmail for commission emails from Jack Copeland, download the PDF attachment, "
+            "parse it, and save to the commissions directory (same as monthly invoice Dropbox folder)."
+        ),
+    )
+    save_commission_p.add_argument(
+        "--test-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Test mode: skip confirmation prompt; save renamed PDF under ~/Downloads (not commissions)."
+        ),
     )
 
     args = parser.parse_args(argv)
@@ -621,4 +640,45 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.command == "save-commission-pdf":
+        query = commission_mail_query_from_env()
+
+        try:
+            backend = GmailApiReadBackend.from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+
+        if not args.test_run:
+            print(
+                "About to save commission PDF:",
+                file=sys.stderr,
+            )
+            print(f"  Query: {query}", file=sys.stderr)
+            print(f"  Destination: {DROPBOX_INVOICE_DIR}", file=sys.stderr)
+            try:
+                confirm = input("  Confirm? (Y/n): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+            if confirm not in ("", "y", "yes"):
+                print("Aborted.", file=sys.stderr)
+                return 2
+
+        try:
+            report = save_commission_pdf(
+                gmail_read_backend=backend,
+                commission_query=query,
+                test_run=args.test_run,
+            )
+        except SaveCommissionPdfError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+
+        print("Commission PDF saved successfully.", file=sys.stderr)
+        print(f"  Email: {report.message_id}", file=sys.stderr)
+        print(f"  PDF: {report.pdf_path}", file=sys.stderr)
+        print(f"  Date: {report.commission_date}, EUR {report.amount_eur}", file=sys.stderr)
+        print(f"  Renamed: {report.renamed_filename}", file=sys.stderr)
+        return 0
+
     return 2

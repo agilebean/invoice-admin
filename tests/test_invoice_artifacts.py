@@ -6,6 +6,7 @@ from googleads_invoice.invoice_artifacts import (
     build_email_body,
     build_email_subject,
     build_renamed_pdf_filename,
+    _eur_commission_filename_amount,
 )
 
 
@@ -17,6 +18,13 @@ def test_build_renamed_pdf_filename_deterministic() -> None:
     )
     name = build_renamed_pdf_filename(fields)
     assert name == "google-ads-invoice_2026-03-15_1234.56-EUR.pdf"
+
+
+def test_commission_filename_amount_grouping_and_strip_cents() -> None:
+    assert _eur_commission_filename_amount(Decimal("1755.73")) == "1,755.73"
+    assert _eur_commission_filename_amount(Decimal("1234.56")) == "1,234.56"
+    assert _eur_commission_filename_amount(Decimal("1755.00")) == "1,755"
+    assert _eur_commission_filename_amount(Decimal("999")) == "999"
 
 
 def test_build_renamed_pdf_filename_whole_euros() -> None:

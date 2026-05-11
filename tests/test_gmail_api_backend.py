@@ -11,8 +11,10 @@ import pytest
 from googleads_invoice.billing_url import extract_billing_url
 from googleads_invoice.gmail_api_backend import (
     DEFAULT_BILLING_MAIL_QUERY,
+    DEFAULT_COMMISSION_MAIL_QUERY,
     GmailApiReadBackend,
     billing_mail_query_from_env,
+    commission_mail_query_from_env,
     html_from_gmail_message_payload,
 )
 from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
@@ -26,6 +28,16 @@ def test_billing_mail_query_default(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_billing_mail_query_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOOGLEADS_GMAIL_BILLING_QUERY", "from:custom")
     assert billing_mail_query_from_env() == "from:custom"
+
+
+def test_commission_mail_query_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GOOGLEADS_COMMISSION_QUERY", raising=False)
+    assert commission_mail_query_from_env() == DEFAULT_COMMISSION_MAIL_QUERY
+
+
+def test_commission_mail_query_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLEADS_COMMISSION_QUERY", "from:jack subject:foo")
+    assert commission_mail_query_from_env() == "from:jack subject:foo"
 
 
 def test_from_token_path_rejects_missing_file(tmp_path: Path) -> None:

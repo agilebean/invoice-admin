@@ -61,10 +61,59 @@ def html_from_gmail_message_payload(payload: dict) -> str | None:
         if nested:
             return nested
     return None
+
+
+# Gmail search for Jack's commission emails (override via env in CLI).
+DEFAULT_COMMISSION_MAIL_QUERY = (
+    "from:jack.copeland@theglugglejugfactory.com commission"
+)
+
+
 def billing_mail_query_from_env() -> str:
     """Return ``GOOGLEADS_GMAIL_BILLING_QUERY`` if set, else :data:`DEFAULT_BILLING_MAIL_QUERY`."""
     raw = os.environ.get("GOOGLEADS_GMAIL_BILLING_QUERY", "").strip()
     return raw if raw else DEFAULT_BILLING_MAIL_QUERY
+
+
+def commission_mail_query_from_env() -> str:
+    """Return ``GOOGLEADS_COMMISSION_QUERY`` if set, else :data:`DEFAULT_COMMISSION_MAIL_QUERY`."""
+    raw = os.environ.get("GOOGLEADS_COMMISSION_QUERY", "").strip()
+    return raw if raw else DEFAULT_COMMISSION_MAIL_QUERY
+
+
+def _subject_header_value(full_message: dict) -> str:
+    for h in (full_message.get("payload") or {}).get("headers") or []:
+        if str(h.get("name") or "").lower() == "subject":
+            return str(h.get("value") or "")
+    return ""
+
+
+def _internal_date_ms(full_message: dict) -> int:
+    raw = full_message.get("internalDate")
+    if raw is None or raw == "" or raw == "0" or raw == 0:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _find_pdf_attachment_part(part: dict) -> dict | None:
+    """First PDF attachment part with a non-empty ``attachmentId``, or ``None``."""
+    mime = (part.get("mimeType") or "").lower()
+    filename = part.get("filename") or ""
+    attachment_id = (part.get("body") or {}).get("attachmentId") or ""
+    pdf_name = filename.lower().endswith(".pdf")
+    is_pdf_mime = mime == "application/pdf"
+    octet_pdf = mime == "application/octet-stream" and pdf_name
+    if attachment_id and (pdf_name or is_pdf_mime or octet_pdf):
+        return part
+
+    for sub in part.get("parts") or []:
+        found = _find_pdf_attachment_part(sub)
+        if found is not None:
+            return found
+    return None
 
 
 class GmailApiReadBackend:
@@ -160,6 +209,46 @@ class GmailApiReadBackend:
             return html
         except HttpError as e:
             raise GmailTransportError(f"Gmail API error: {e}") from e
+
+    def get_message_pdf_with_metadata(
+        self, message_id: str
+    ) -> tuple[bytes, str, int] | None:
+        """Return ``(pdf_bytes, subject, internal_date_ms)`` or ``None`` if no PDF attachment."""
+        try:
+            service = self._service()
+            full = (
+                service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+                .execute()
+            )
+            subject = _subject_header_value(full)
+            internal_ms = _internal_date_ms(full)
+            payload = full.get("payload") or {}
+            part = _find_pdf_attachment_part(payload)
+            if part is None:
+                return None
+            attachment_id = (part.get("body") or {}).get("attachmentId")
+            if not attachment_id:
+                return None
+            att = (
+                service.users()
+                .messages()
+                .attachments()
+                .get(userId="me", messageId=message_id, id=attachment_id)
+                .execute()
+            )
+            raw = att.get("data") or ""
+            if not raw:
+                return None
+            return (_urlsafe_b64decode(raw), subject, internal_ms)
+        except HttpError as e:
+            raise GmailTransportError(f"Gmail API error: {e}") from e
+
+    def get_message_pdf_attachment(self, message_id: str) -> bytes | None:
+        """Return first PDF attachment body as bytes, or ``None`` if none match."""
+        trio = self.get_message_pdf_with_metadata(message_id)
+        return None if trio is None else trio[0]
 
     def send_plain_text(
         self,

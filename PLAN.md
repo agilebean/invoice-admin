@@ -1,6 +1,6 @@
 # Google Ads invoice → Jack
 
-Repo: https://github.com/SoHu-Labs/googleads-invoice-glugglejug
+Repo: https://github.com/SoHu-Labs/billing-glugglejug
 
 ## Goal
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "googleads-invoice-glugglejug"
+name = "billing-glugglejug"
 version = "0.0.0"
 description = "Gmail → Google Ads invoice PDF → email automation (planned slices)."
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-googleads-invoice = "googleads_invoice.cli:main"
+billing-glugglejug = "googleads_invoice.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "selenium>=4.15"]
