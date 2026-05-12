@@ -36,3 +36,9 @@ htmlcov/
 
 downloads/
 artifacts/
+
+# invoice_admin local state
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+**/foyer_session.json

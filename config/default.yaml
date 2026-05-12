@@ -1,0 +1,23 @@
+dry_run: true
+max_auto_amount_eur: 2000
+classifier_min_confidence: 0.7
+
+models:
+  fast: claude-haiku-4-5
+  smart: claude-opus-4-7
+  cheap: deepseek/deepseek-chat
+  local: ollama/llama3.1:70b
+
+notify:
+  ntfy_topic: null
+  pushover_user: null
+  pushover_token: null
+
+paths:
+  state_dir: null
+  invoices_root: null
+  tracker_path: null
+  log_path: null
+  llm_calls_path: null
+  # Human-labeled few-shot rows for classification (null = <repo>/config/classifier_examples.jsonl)
+  classifier_examples: null

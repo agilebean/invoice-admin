@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "billing-glugglejug"
+name = "invoice-admin"
 version = "0.0.0"
-description = "Gmail → Google Ads invoice PDF → email automation (planned slices)."
+description = "Invoice admin — ingest, classify, route, track; includes Google Ads outgoing invoice automation."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -14,17 +14,22 @@ dependencies = [
     "google-api-python-client>=2.0",
     "google-auth>=2.0",
     "google-auth-httplib2>=0.2",
+    "litellm>=1.55",
+    "fints>=5.0",
+    "playwright>=1.42",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
-billing-glugglejug = "googleads_invoice.cli:main"
+googleads-invoice = "googleads_invoice.cli:main"
+invoice = "invoice_admin.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "selenium>=4.15"]
 oauth = ["google-auth-oauthlib>=1.0"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/googleads_invoice"]
+packages = ["src/googleads_invoice", "src/invoice_admin"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

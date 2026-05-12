@@ -1,6 +1,6 @@
 # Google Ads invoice → Jack
 
-Repo: https://github.com/SoHu-Labs/billing-glugglejug
+Repo: https://github.com/SoHu-Labs/invoice-admin (formerly billing-glugglejug)
 
 ## Goal
 
@@ -72,7 +72,7 @@ Each iteration closes with merged code, **pytest green in CI**, and **no OAuth/r
 | **In scope** | `pyproject.toml`, **`environment.yml`** (mamba), runnable `pytest` baseline, trivial package layout (`src/…`), one smoke test asserting `True`, GitHub Action `pytest` on push/PR, `.gitignore` for Python/OS cruft |
 | **Out of scope** | Gmail, Selenium, PDF parsing, PDF fixtures, OAuth, Brave |
 | **Acceptance criteria** | Fresh checkout → documented **mamba** env + **`pip install -e ".[dev]"`** + **`pytest`** → pass locally; GH Actions completes green on repo default branch |
-| **Retrospective** | **Smoke vs `assert True`:** import + `__version__` gives a stronger “package wired correctly” signal without extra deps.<br><br>**Pytest + `src/`:** `[tool.pytest.ini_options] pythonpath = ["src"]` keeps `pytest` working without an editable install; CI still uses `pip install -e ".[dev]"` so packaging stays exercised.<br><br>**Hatchling:** wheel `packages = ["src/googleads_invoice"]` matches the layout—if package name or paths move, update wheel config and pytest `pythonpath` together.<br><br>**Local env:** **`environment.yml`** + **mamba** (not **`venv`**); Python deps stay in **`pyproject.toml`** via **`pip install -e`.**<br><br>**CI:** workflow pins push to `main`; rename default branch or use multiple protected branches → adjust `on.push.branches`. |
+| **Retrospective** | **Smoke vs `assert True`:** import + `__version__` gives a stronger “package wired correctly” signal without extra deps.<br><br>**Pytest + `src/`:** `[tool.pytest.ini_options] pythonpath = ["src"]` keeps `pytest` working without an editable install; CI still uses `pip install -e ".[dev]"` so packaging stays exercised.<br><br>**Hatchling:** wheel `packages = ["src/googleads_invoice", "src/invoice_admin"]` — if package roots move, update wheel config and pytest `pythonpath` together.<br><br>**Local env:** **`environment.yml`** + **mamba** (not **`venv`**); Python deps stay in **`pyproject.toml`** via **`pip install -e`.**<br><br>**CI:** workflow pins push to `main`; rename default branch or use multiple protected branches → adjust `on.push.branches`. |
 
 ---
 
@@ -159,6 +159,16 @@ See **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** for the full interview and recorde
 | **10.3** | **3** | **Gmail API** search + billing URL from message HTML | **`list-billing-mail`**, **`billing-url-from-gmail`** (prints payments URL); **`GOOGLE_OAUTH_TOKEN`**; optional **`GOOGLEADS_GMAIL_BILLING_QUERY`**. Verified end-to-end 2026-05-03: OAuth token generated, `list-billing-mail` returns billing messages. |
 | **10.4** | **4** | **Brave** billing Documents / UI identification + download | **`googleads-invoice live-brave-download`** (``--debugger-address`` / ``GOOGLEADS_BROWSER_DEBUGGER_ADDRESS``, ``--deeplink`` / ``GOOGLEADS_BILLING_DEEPLINK``, ``--download-dir``, ``GOOGLEADS_CONFIRM_LIVE_BRAVE=1``). Saves HTML+PNG trace when download button can't be matched. |
 | **11** | **5** | **Full monthly flow**: Gmail search → Brave download → parse → SMTP send, one command | **`googleads-invoice run-month`**; requires **`GOOGLEADS_CONFIRM_RUN_MONTH=1`** + Gmail OAuth token + Brave debugger + SMTP app password. See **`run-month`** help. |
+
+---
+
+## Post-plan backlog (after `docs/IMPLEMENTATION_PLAN_invoice_handler.md` is done)
+
+| ID | Task | Why | Rough scope |
+|----|------|-----|---------------|
+| **P1** | **Fold `googleads_invoice` into `invoice_admin`** (e.g. `invoice_admin/integrations/googleads/` or similar), then drop the standalone **`googleads_invoice`** package from the wheel if desired | One **`src/`** tree and one primary namespace matches how you think about the product | **Large:** move ~20 modules, switch `from googleads_invoice…` → `from invoice_admin…` (or keep a thin **`googleads_invoice`** shim package that re-exports), update every test **`@patch`** path, re-run full parity + **`run-month`** / **`dry-run`** checks; optional follow-up: single CLI only (`invoice …`) with `googleads-invoice` as a thin alias |
+
+*Do **not** start P1 until the implementation plan’s agreed milestones are merged and the fast suite is green — it is a deliberate second project phase, not part of the current wrap-and-track slices.*
 
 ---
 

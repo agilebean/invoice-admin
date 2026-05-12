@@ -124,7 +124,7 @@ def _subject_body_attachment_for_pdf(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="billing-glugglejug")
+    parser = argparse.ArgumentParser(prog="googleads-invoice")
     sub = parser.add_subparsers(dest="command", required=True)
 
     dry = sub.add_parser(

@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.billing-glugglejug.monthly</string>
+    <string>com.invoice-admin.monthly</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/chaehan/Software/Prototypes/billing-glugglejug/scripts/run-monthly.sh</string>
+        <string>/Users/chaehan/Software/Prototypes/invoice-admin/scripts/run-monthly.sh</string>
     </array>
 
     <!-- Run on the 2nd of each month at 05:00 -->

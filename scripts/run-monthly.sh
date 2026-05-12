@@ -29,7 +29,7 @@ done
 # Activate mamba env and run
 source "$HOME/Software/miniforge3/etc/profile.d/conda.sh" 2>/dev/null || true
 eval "$(conda shell.bash hook)"
-conda activate billing-glugglejug
+conda activate invoice-admin
 
 export GOOGLEADS_CONFIRM_RUN_MONTH=1
 export GOOGLEADS_GMAIL_OAUTH_TOKEN="$HOME/.gmail/gmail_readonly_token.json"
@@ -38,8 +38,12 @@ export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 export GOOGLEADS_BROWSER_DEBUGGER_ADDRESS="127.0.0.1:9222"
 
 echo "Running run-month..." >> "$LOG_DIR/monthly.log"
-cd "$HOME/Software/Prototypes/billing-glugglejug"
-python -m googleads_invoice run-month >> "$LOG_DIR/monthly.log" 2>&1
+cd "$HOME/Software/Prototypes/invoice-admin"
+if command -v googleads-invoice >/dev/null 2>&1; then
+  googleads-invoice run-month >> "$LOG_DIR/monthly.log" 2>&1
+else
+  python -m googleads_invoice run-month >> "$LOG_DIR/monthly.log" 2>&1
+fi
 
 echo "Done. Stopping Brave..." >> "$LOG_DIR/monthly.log"
 kill "$BRAVE_PID" 2>/dev/null || true

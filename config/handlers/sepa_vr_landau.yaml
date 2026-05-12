@@ -1,0 +1,11 @@
+# VR Landau SEPA transfer handler config
+# WARNING: dry_run must be true for the first 14 days. Change only after review with Chaehan.
+# iban_self, account_holder, fints_pin — set via env INVOICE_ADMIN_IBAN_SELF, INVOICE_ADMIN_ACCOUNT_HOLDER, FINTS_PIN (merged by load_config; never store secrets here).
+dry_run: true
+max_auto_amount_eur: 2000
+
+blz: "54061170"
+fints_endpoint: "https://hbci-pintan.gad.de/cgi-bin/hbciservlet"
+code: "54061170"
+
+tan_mechanism: "decoupledTAN"

@@ -1,0 +1,31 @@
+# Outgoing invoice handler for Gluggle Jug client
+client:
+  name: "The Gluggle Jug Factory"
+  contact: "Jack Copeland"
+  email: "jack.copeland@theglugglejugfactory.com"
+
+email:
+  sender: "chaehan.so@gmail.com"
+  cc:
+    - "sophie.mahlo@theglugglejugfactory.com"
+    - "rudi.mahlo@theglugglejugfactory.com"
+  bcc:
+    - "chaehan.so@gmail.com"
+  test_recipient: "chaehan.so@virtualfriend.chat"
+
+commission:
+  rate: 0.03
+  sender_email: "jack.copeland@theglugglejugfactory.com"
+  query: "commission"
+
+paths:
+  dropbox_invoice_dir: "~/Library/CloudStorage/Dropbox/Finance/GluggleJug/GluggleJug Commissions"
+  dropbox_commission_dir: "~/Library/CloudStorage/Dropbox/Finance/GluggleJug/Commissions"
+
+billing:
+  query: 'from:payments-noreply@google.com subject:"Google Ads: Your billing document is ready"'
+  brave_debug_port: 9222
+
+pdf_naming:
+  invoice_pattern: "google-ads-invoice_{date}_{amount}-EUR.pdf"
+  commission_pattern: "{month} Commission {month_name} €{amount}.pdf"

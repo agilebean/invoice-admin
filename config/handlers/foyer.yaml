@@ -1,0 +1,18 @@
+# Foyer Global Health claim handler config
+portal_url: "https://portal.foyerglobalhealth.com"
+session_path: "~/.local/state/invoice_admin/foyer_session.json"
+artifacts_dir: "~/.local/state/invoice_admin/artifacts"
+timeout_ms: 30000
+
+locators:
+  login_username: "input[name='username']"
+  login_password: "input[name='password']"
+  login_submit: "button[type='submit']"
+  claims_tab: "text=Claims"
+  new_claim_button: "text=Submit New Claim"
+  claim_form_date: "input[name='service_date']"
+  claim_form_vendor: "input[name='provider_name']"
+  claim_form_amount: "input[name='claim_amount']"
+  claim_form_upload: "input[type='file']"
+  claim_submit: "button:has-text('Submit')"
+  confirmation_number: ".confirmation-number"
