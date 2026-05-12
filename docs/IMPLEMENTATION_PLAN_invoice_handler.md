@@ -1,6 +1,108 @@
 # Implementation Plan — invoice-admin Refactor
 
-> Written for a coding LLM. Every instruction is prescriptive. No ambiguity. No room for creative interpretation. Read the full plan before writing any code.
+> Written for a coding LLM. Every instruction is prescriptive. No ambiguity. No room for creative interpretation. Read the **Agent execution contract** (section immediately below), then the rest of this file, before writing any code.
+
+---
+
+## Agent execution contract (mandatory — read before §0)
+
+This block exists so a maintainer can prompt with **only**: *“Read `docs/IMPLEMENTATION_PLAN_invoice_handler.md` and do the next step.”* The agent must obey this contract **before** writing or changing code.
+
+### 1) Single source of truth (conflict order)
+
+When instructions conflict, resolve in this **strict order** (higher wins):
+
+1. **Explicit text in the user’s current chat** that names a milestone (e.g. “implement **M5.1** only”) or a file path.
+2. **This file** (`IMPLEMENTATION_PLAN_invoice_handler.md`) — milestones **§2**, hard rules **§3**, tests **§4**, ordered checklist **§5**.
+3. **`docs/PROJECT_BRIEF_invoice_handler.md`** — product facts; if it disagrees with **this file** on *how* `invoice_admin` should behave, **this file wins**.
+4. **`PLAN.md`** — agile ritual, CI policy, **P1** (merge `googleads_invoice` into `invoice_admin`), and the **Google Ads backward plan** (`googleads_invoice` / `run-month`). Those are **mostly out of scope** for M1–M7 unless a milestone here explicitly says to touch them.
+5. **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** — narrative context only; **not** an alternate task list for `invoice_admin` milestones.
+
+**Brave / Google Ads / billing URLs:** If the task touches headed browser, debugger attach, or “does this URL work while logged in”, also obey **`.cursor/rules/brave-for-google-ads.mdc`** in the repo (source of truth for that class of work).
+
+### 2) Vocabulary — words that confuse LLMs
+
+| Term | **Means in this repo** | **Does not mean** | **Primary code / docs** |
+|------|------------------------|-------------------|---------------------------|
+| **Follow-up / followup** | The **`invoice_admin.followup`** package: rules in `followup/schedules.py`, engine in `followup/engine.py`, driven off **tracker** row age + status; may call **`notify`**. | “Reply in Chat”, “open a GitHub follow-up”, “email the user later”. | §2 **M7**; `src/invoice_admin/followup/` |
+| **Tracker** | SQLite **invoice ledger** for `invoice_admin` (idempotency, statuses, errors). | GitHub issue tracker. | §2 **M2.3**; `core/tracker.py` |
+| **Handler** | `invoice_admin.handlers.*` implementing the **handler Protocol** for a concrete `invoice_type`. | Arbitrary “event handler” in UI. | §2 **M4–M6** |
+| **Dry run** | Config + handler behavior that **must not** move real money (SEPA: **default dry-run**; see **§3** and Post-M7). | “pytest dry run” or “print only”. | YAML `dry_run`; §2 **M5**, **Post-M7** |
+| **`googleads_invoice`** | **Separate package** under `src/googleads_invoice/` (Jack / Google Ads monthly, commission PDF, `run-month`, etc.). | Part of `invoice_admin` until **P1** is explicitly approved in `PLAN.md`. | `PLAN.md` P1; §2 **M6** wrapper only |
+
+### 3) Canonical maintainer prompts (copy/paste)
+
+Use **one** of these shapes; do not invent new scope sentences.
+
+- **Next step (default):**  
+  *“Read `docs/IMPLEMENTATION_PLAN_invoice_handler.md` (including the Agent execution contract). Run the full fast `pytest` suite. Implement the **next** open row in **§5 Summary — Step Order** that is not yet satisfied in the codebase. Do not start P1. Stop when tests are green and list what you changed.”*
+
+- **Named milestone only:**  
+  *“Read the implementation plan. Implement **M4.2** exactly as written in §2. No other milestones. Tests must stay green.”*
+
+- **Bugfix / regression:**  
+  *“Read §3 Hard Rules and §4 Test Strategy. Add a **failing** test that reproduces [symptom], then minimal production fix. Do not change milestones not listed: [Mx.y].”*
+
+If the user’s message is vague and **does not** select a milestone, the agent asks **exactly one** clarifying question: *“Should I continue from §5 next open step, or implement milestone **M\_\_.\_**?”* — then **stop** until answered.
+
+### 4) Permissions, environment, and “what to run”
+
+| Requirement | Rule |
+|-------------|------|
+| **Python** | **3.12+** (`requires-python` / CI). |
+| **Env** | **`mamba`** env from repo **`environment.yml`** (name **`invoice-admin`**). Install app + dev deps: **`pip install -e ".[dev]"`**. |
+| **Tests (definition of done)** | Full fast suite: **`python -m pytest`** at repo root after install. Must match **`.github/workflows/ci.yml`** (`pip install -e ".[dev]"` then **`pytest`**). |
+| **Markers** | **`@pytest.mark.e2e`**, **`live_brave`**, **`live_spark`**, etc. — **skipped by default** in CI and locally unless env vars documented in **`PLAN.md`** / **`tests/conftest.py`**. Do **not** turn them on in CI without maintainer decision. |
+| **Network / live APIs** | **Not** part of default “green”. No milestone may require live Gmail, live Brave, or real FinTS **for the default pytest run** unless that milestone explicitly says so **and** uses markers/skips. |
+| **Secrets** | **Never** commit secrets. **Never** put FinTS PIN, IMAP password, API keys, or real IBANs in YAML or code. Only **`/.env.example`**-style placeholders + env var names. Real values live in **`.env`** (gitignored) or OS keychain — see **§3 Security**. |
+
+### 5) Caveats matrix (non-exhaustive — if touched, read the row’s “read” cell)
+
+| Topic | Hard rule | If you violate it |
+|-------|-----------|-------------------|
+| **SEPA / money** | **Dry-run** until Post-M7 checklist; **`MAX_AUTO_AMOUNT_EUR`**; no silent money failures | Re-read **§3 Money safety** + **M5** warnings |
+| **Brave / Google Ads** | Do **not** validate logged-in billing URLs in Cursor’s embedded browser; use **debugger attach** workflow | Read **`.cursor/rules/brave-for-google-ads.mdc`** + **`docs/REAL_WORKFLOW_AND_PREFLIGHT.md`** |
+| **Spark / IMAP** | Spark URL format may change; IMAP is provider-specific | **M2.8** warning; **`.env.example`** for `INVOICE_ADMIN_IMAP_*` |
+| **Idempotency** | Same file hash / same `message_id` → no duplicate tracker rows | **§3 Idempotency** |
+| **Scope** | Implement **only** the named milestone (or §5 next step). No drive-by refactors, no “while we’re here” | Repo **CLAUDE.md** scope discipline |
+
+### 6) How to phrase *caveats* back to the human (required closing block)
+
+After every slice, end with this **fixed skeleton** (fill brackets; omit lines that are N/A):
+
+```text
+## Slice summary
+- Milestone: [e.g. M4.2]
+- Files touched: [list]
+
+## Verification
+- Command: python -m pytest
+- Result: [N passed, M skipped]
+
+## Caveats / follow-ups for the maintainer
+- **Follow-up (code):** [tracker tickets / next milestone ids — or “none”]
+- **Follow-up (ops):** [env vars to set / Brave port / manual smoke — or “none”]
+- **Risks:** [money / PII / provider drift — or “none”]
+```
+
+Use **“Follow-up (code)”** only for **the next milestone or a concrete bug** — not generic advice. Use **“Follow-up (ops)”** for anything requiring **human credentials or a real browser**.
+
+### 7) What this plan does **not** automate
+
+- **P1** (merge `googleads_invoice` into `invoice_admin`) — see **`PLAN.md`**. **Do not start** unless the user explicitly overrides this contract in chat.
+- **Production SEPA go-live** — only after **Post-M7** human checklist in §2; config flip, not new code.
+- **Changing Jack’s Google Ads mail/send pipeline** beyond what **M6** wrapper needs — that is **`googleads_invoice`** + **`PLAN.md`** backward plan, not M3 file ingest.
+
+### 8) Navigation map (for search / skimming)
+
+| Need | Go to |
+|------|--------|
+| Milestone steps, warnings, patterns | **§2 Implementation Steps — By Milestone** |
+| Non-negotiables | **§3 Hard Rules** |
+| What tests to add / markers | **§4 Test Strategy** |
+| Ordered checklist for dumb execution | **§5 Summary — Step Order for the Coding LLM** |
+| File naming nitpicks | **§6 File Naming Convention Reference** |
+| External refs | **§7 References** |
 
 ---
 
@@ -33,9 +135,9 @@ mail_app_draft.py        # Open Mail.app draft via AppleScript
 save_commission_pdf.py   # Gmail search → download commission PDF → parse → move to Dropbox
 ```
 
-**Tests**: 22 test files in `tests/`, using pytest, with HTML/PDF fixtures in `tests/fixtures/`.
+**Tests**: 22+ test files in `tests/`, using pytest, with HTML/PDF fixtures in `tests/fixtures/`.
 
-**There is NO persistence layer.** No database, no ledger, no invoice numbering. The system is stateless.
+**Persistence:** The **`googleads_invoice`** monthly/commission flows described in the tree above are largely **stateless** (no first-class invoice ledger there). The **`invoice_admin`** package introduced by this plan **adds** a SQLite **tracker** (`core/tracker.py`) for ingest/handler/follow-up state — see **§2 M2.3** and the project brief. Do not claim “no database” when editing `invoice_admin` code.
 
 ### 0b. What you mirror (the `swim` repo at `/Users/chaehan/Software/Prototypes/swim/`)
 

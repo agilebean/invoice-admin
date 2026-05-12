@@ -4,6 +4,8 @@ You are refactoring `invoice-admin` (formerly `billing-glugglejug`, recently ren
 
 This is an **in-place refactor**, not a greenfield rewrite. All current functionality must continue to work — it becomes the `OutgoingInvoiceHandler`. Read this brief fully before any action.
 
+**Coding agents:** step order, **mandatory prompts**, **permissions**, **caveats**, and disambiguation of terms like **“followup”** live in **`docs/IMPLEMENTATION_PLAN_invoice_handler.md`** under **Agent execution contract** — read that block first, then this brief for product intent.
+
 ---
 
 ## 0. First Action — Study Two Codebases (mandatory)
