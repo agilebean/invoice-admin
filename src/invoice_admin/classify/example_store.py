@@ -19,6 +19,7 @@ _FEW_SHOT_FIELD_KEYS: tuple[str, ...] = (
     "iban",
     "bic",
     "verwendungszweck",
+    "document_topic",
 )
 
 
@@ -101,6 +102,7 @@ def _extracted_to_mapping(extracted: ExtractedInvoiceData) -> dict[str, Any]:
         "iban": extracted.iban,
         "bic": extracted.bic,
         "verwendungszweck": extracted.verwendungszweck,
+        "document_topic": extracted.document_topic,
         "raw_json": extracted.raw_json,
     }
 

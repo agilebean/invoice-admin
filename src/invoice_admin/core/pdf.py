@@ -23,6 +23,7 @@ class ExtractedInvoiceData:
     iban: str | None
     bic: str | None
     verwendungszweck: str | None
+    document_topic: str | None
     raw_json: str
 
 
@@ -67,18 +68,20 @@ def _json_object_from_llm_text(raw_text: str) -> tuple[dict[str, Any], str]:
 
 def _extracted_from_dict(data: dict[str, Any], raw_json: str) -> ExtractedInvoiceData:
     vendor_s = _str_field(data.get("vendor"))
+    amount_f = _safe_float(data.get("amount"))
     extracted = ExtractedInvoiceData(
         vendor=vendor_s,
         invoice_date=_str_field(data.get("invoice_date")),
         due_date=_str_field(data.get("due_date")),
-        amount=_safe_float(data.get("amount")),
+        amount=amount_f,
         currency=_str_field(data.get("currency")),
         iban=_str_field(data.get("iban")),
         bic=_str_field(data.get("bic")),
         verwendungszweck=_str_field(data.get("verwendungszweck")),
+        document_topic=_str_field(data.get("document_topic")),
         raw_json=raw_json,
     )
-    if extracted.vendor is None and extracted.amount is None:
+    if vendor_s is None and amount_f is None:
         raise ExtractionError("Extraction missing vendor and amount")
     return extracted
 
@@ -88,17 +91,52 @@ def extract_pdf_data(
     llm_provider: Any,
     model_alias: str = "smart",
 ) -> ExtractedInvoiceData:
-    """Send PDF to Claude, get structured data back."""
-    prompt = EXTRACTION_PROMPT
+    """Extract structured invoice fields from a PDF.
+
+    Tries pypdf text extraction first; falls back to sending raw PDF
+    bytes (multimodal) when pypdf cannot parse the file.
+    """
     pdf_bytes = pdf_path.read_bytes()
-    raw_text = llm_provider.complete_with_pdf(
+
+    try:
+        raw_text = _extract_via_pypdf_text(pdf_bytes, llm_provider, model_alias)
+    except Exception:
+        raw_text = llm_provider.complete_with_pdf(
+            EXTRACTION_PROMPT,
+            pdf_bytes,
+            model_alias=model_alias,
+            purpose="pdf_extraction",
+        )
+
+    data, raw_json = _json_object_from_llm_text(raw_text)
+    return _extracted_from_dict(data, raw_json)
+
+
+def _extract_via_pypdf_text(
+    pdf_bytes: bytes,
+    llm_provider: Any,
+    model_alias: str,
+) -> str:
+    """Extract text with pypdf, then ask the LLM to parse it."""
+    import pypdf
+    from io import BytesIO
+
+    reader = pypdf.PdfReader(BytesIO(pdf_bytes))
+    parts: list[str] = []
+    for i, page in enumerate(reader.pages):
+        text = (page.extract_text() or "").strip()
+        if text:
+            parts.append(f"--- page {i + 1} ---\n{text}")
+    pdf_text = "\n\n".join(parts)
+    if not pdf_text.strip():
+        raise ExtractionError("pypdf returned no extractable text")
+    capped = pdf_text[:500_000]
+    prompt = EXTRACTION_PROMPT + "\n\nPDF text:\n" + capped
+    return llm_provider.complete(
         prompt,
-        pdf_bytes,
         model_alias=model_alias,
         purpose="pdf_extraction",
     )
-    data, raw_json = _json_object_from_llm_text(raw_text)
-    return _extracted_from_dict(data, raw_json)
 
 
 def extract_html_invoice_data(

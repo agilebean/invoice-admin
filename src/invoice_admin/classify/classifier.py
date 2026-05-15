@@ -82,6 +82,7 @@ def classify_invoice(
             "iban": extracted.iban,
             "bic": extracted.bic,
             "verwendungszweck": extracted.verwendungszweck,
+            "document_topic": extracted.document_topic,
         },
         indent=2,
         sort_keys=True,

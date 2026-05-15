@@ -11,7 +11,7 @@ from typing import Any
 
 from invoice_admin.classify.classifier import classify_invoice
 from invoice_admin.core.config import InvoiceConfig
-from invoice_admin.core.errors import ExtractionError
+from invoice_admin.core.errors import ExtractionError, tracker_error_blob
 from invoice_admin.core.imap import EmailMessage
 from invoice_admin.core.naming import build_invoice_pdf_filename
 from invoice_admin.core.pdf import extract_html_invoice_data, extract_pdf_data
@@ -21,25 +21,14 @@ logger = logging.getLogger(__name__)
 
 
 def _dest_dir_for_type(invoice_type: str, paths: Any) -> Path:
-    year = datetime.now(timezone.utc).year
     if invoice_type == "foyer_claim":
-        return paths.foyer_claims_dir / str(year)
+        return paths.foyer_claims_dir
     if invoice_type == "sepa_transfer":
-        return paths.sepa_transfers_dir / str(year)
+        return paths.sepa_transfers_dir
     if invoice_type == "outgoing_invoice":
-        return paths.outgoing_dir / str(year)
+        return paths.outgoing_dir
     day = datetime.now(timezone.utc).date().isoformat()
     return paths.failures_dir / day
-
-
-def _error_blob(exc: Exception) -> str:
-    return json.dumps(
-        {
-            "type": type(exc).__name__,
-            "message": str(exc),
-        },
-        indent=2,
-    )
 
 
 def _merge_notes(result_notes: str | None, extra_pdfs: int | None) -> str | None:
@@ -130,7 +119,7 @@ def ingest_email(
             "email",
             email_msg.message_id,
             status="failed",
-            error=_error_blob(e),
+            error=tracker_error_blob(e),
         )
     except Exception as e:
         try:
@@ -138,7 +127,7 @@ def ingest_email(
                 "email",
                 email_msg.message_id,
                 status="failed",
-                error=_error_blob(e),
+                error=tracker_error_blob(e),
             )
         except Exception:
             logger.exception("Failed to record tracker failure row")
