@@ -6,6 +6,7 @@ This is the "one command" caller for the month-end workflow. Each real I/O bound
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -72,7 +73,7 @@ def run_month(
     smtp_backend: SmtpGmailBackend,
     smtp_sender: str,
     to_address: str,
-    test_run: bool = False,
+    dry_run: bool = False,
     # Month label (None = auto from previous calendar month)
     month_label: str | None = None,
     # Dropbox destination (None = use default from addresses.py)
@@ -88,7 +89,7 @@ def run_month(
         step_dur = now - _last_t[0]
         total = now - _t0
         _last_t[0] = now
-        print(f"  [{n}/{_STEP}] +{step_dur:.1f}s/{total:.1f}s {msg}", flush=True)
+        print(f"  [{n}/{_STEP}] +{step_dur:.1f}s/{total:.1f}s {msg}", flush=True, file=sys.stderr)
 
     steps: list[str] = []
 
@@ -132,7 +133,7 @@ def run_month(
     )
 
     _step(3, "Launching Brave to download invoice PDF...")
-    ensure_brave_running(debugger_address)
+    ensure_brave_running(debugger_address, launch_timeout_s=7.0)
     try:
         pdf_path = live_brave_download_pdf(
             debugger_address=debugger_address,
@@ -168,23 +169,28 @@ def run_month(
     steps.append(f"Artifacts built: attachment={attach_name}")
 
     # 5. SMTP send
-    cc_list = None if test_run else CC_RECIPIENTS
-    bcc_list = None if test_run else BCC_RECIPIENTS
-    _step(6, f"Sending email to {to_address}...")
-    try:
-        status = smtp_backend.send_text_with_pdf_attachment(
-            sender=smtp_sender,
-            to=to_address,
-            cc=cc_list,
-            bcc=bcc_list,
-            subject=subject,
-            body=body,
-            pdf_path=pdf_path,
-            attachment_name=attach_name,
-        )
-    except GmailTransportError as e:
-        raise RunMonthError(f"SMTP send failed: {e}") from e
-    steps.append(f"Email sent (status: {status})")
+    if dry_run:
+        _step(6, "Dry run — skipping email send.")
+        steps.append("Email: skipped (dry-run)")
+        status = "dry-run: skipped"
+    else:
+        cc_list = CC_RECIPIENTS
+        bcc_list = BCC_RECIPIENTS
+        _step(6, f"Sending email to {to_address}...")
+        try:
+            status = smtp_backend.send_text_with_pdf_attachment(
+                sender=smtp_sender,
+                to=to_address,
+                cc=cc_list,
+                bcc=bcc_list,
+                subject=subject,
+                body=body,
+                pdf_path=pdf_path,
+                attachment_name=attach_name,
+            )
+        except GmailTransportError as e:
+            raise RunMonthError(f"SMTP send failed: {e}") from e
+        steps.append(f"Email sent (status: {status})")
 
     _step(7, "Moving file to Dropbox...")
     dropbox_dir = dropbox_dir or Path(DROPBOX_INVOICE_DIR).expanduser()

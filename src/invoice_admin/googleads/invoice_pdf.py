@@ -66,10 +66,31 @@ def _extract_issue_date(text: str) -> date:
             dt = datetime.strptime(f"{month_str} {day} {year}", "%B %d %Y")
         return dt.date()
 
+    # Format 3: any date-like pattern as last resort
+    match = re.search(r"(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})", text)
+    if match:
+        day = int(match.group(1))
+        month_str = match.group(2)
+        year = int(match.group(3))
+        dt = datetime.strptime(f"{month_str} {day} {year}", "%b %d %Y")
+        return dt.date()
+
+    # Format 4: commission PDF — "Invoice April Commission (EUR)" / "Invoice January Commission (EUR)"
+    match = re.search(
+        r"Invoice\s+(January|February|March|April|May|June|July|August|September|"
+        r"October|November|December)\s+Commission",
+        text,
+    )
+    if match:
+        month_str = match.group(1)
+        # Commission month is derived from the billing month label; use today as fallback
+        return date(date.today().year, datetime.strptime(month_str, "%B").month, 1)
+
     raise InvoicePdfError(
         "Could not parse invoice date from PDF text. "
         "Expected either 'Invoice date: YYYY-MM-DD' (synthetic) or "
-        "'Mon DD, YYYY' (real Google Ads invoice)."
+        "'Mon DD, YYYY' (real Google Ads invoice). "
+        f"Text extracted: {text[:300]!r}"
     )
 
 

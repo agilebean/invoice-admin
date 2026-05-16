@@ -105,7 +105,7 @@ def save_commission_pdf(
     commission_query: str,
     max_scan: int = 10,
     commission_dir: Path | None = None,
-    test_run: bool = False,
+    dry_run: bool = False,
     downloads_dir: Path | None = None,
 ) -> SaveCommissionReport:
     """Search Gmail for commission mail, stage PDF under Downloads (visible), parse, save renamed file."""
@@ -199,7 +199,7 @@ def save_commission_pdf(
         )
         steps.append(f"Filename: {base_name}")
 
-        if test_run:
+        if dry_run:
             dest_dir = staging_root
         else:
             dest_dir = commission_dir or Path(DROPBOX_INVOICE_DIR).expanduser()

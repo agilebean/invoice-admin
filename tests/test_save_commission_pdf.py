@@ -65,7 +65,7 @@ def test_save_commission_pdf_happy_path(
     assert not list(downloads.glob("Commission download*.pdf"))
 
 
-def test_save_commission_pdf_test_run_writes_under_downloads(
+def test_save_commission_pdf_dry_run_writes_under_downloads(
     mock_gmail_backend: MagicMock,
     tmp_path: Path,
 ) -> None:
@@ -74,7 +74,7 @@ def test_save_commission_pdf_test_run_writes_under_downloads(
     report = save_commission_pdf(
         gmail_read_backend=mock_gmail_backend,
         commission_query="from:jack commission",
-        test_run=True,
+        dry_run=True,
         downloads_dir=downloads,
         commission_dir=tmp_path / "Ignored",
     )
@@ -203,7 +203,7 @@ def test_save_commission_pdf_no_month_in_subject(tmp_path: Path) -> None:
 
 
 class TestCliSaveCommissionPdf:
-    def test_test_run_skips_confirmation(
+    def test_dry_run_skips_confirmation(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from invoice_admin.googleads.cli import main
@@ -225,9 +225,9 @@ class TestCliSaveCommissionPdf:
                 return_value=mock_report,
             ) as mock_save,
         ):
-            code = main(["save-commission-pdf", "--test-run"])
+            code = main(["save", "--dry-run"])
             assert code == 0
-            assert mock_save.call_args.kwargs["test_run"] is True
+            assert mock_save.call_args.kwargs["dry_run"] is True
 
     @patch("builtins.input", return_value="y")
     def test_confirms_then_saves(
@@ -252,9 +252,9 @@ class TestCliSaveCommissionPdf:
                 return_value=mock_report,
             ) as mock_save,
         ):
-            code = main(["save-commission-pdf"])
+            code = main(["save"])
             assert code == 0
-            assert mock_save.call_args.kwargs["test_run"] is False
+            assert mock_save.call_args.kwargs["dry_run"] is False
 
     @patch("builtins.input", return_value="n")
     def test_abort_on_no(
@@ -266,7 +266,7 @@ class TestCliSaveCommissionPdf:
 
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
         with patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env"):
-            code = main(["save-commission-pdf"])
+            code = main(["save"])
             assert code == 2
 
     def test_errors_when_oauth_missing(
@@ -275,7 +275,7 @@ class TestCliSaveCommissionPdf:
         from invoice_admin.googleads.cli import main
 
         monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
-        code = main(["save-commission-pdf", "--test-run"])
+        code = main(["save", "--dry-run"])
         assert code == 2
 
 
@@ -283,8 +283,8 @@ def test_cli_save_commission_pdf_help_lists_subcommand(capsys: pytest.CaptureFix
     from invoice_admin.googleads.cli import main
 
     with pytest.raises(SystemExit):
-        main(["save-commission-pdf", "--help"])
+        main(["save", "--help"])
     err = capsys.readouterr()
     combined = err.out + err.err
-    assert "save-commission-pdf" in combined
+    assert "save" in combined
     assert "~/Downloads" in combined or "Downloads" in combined

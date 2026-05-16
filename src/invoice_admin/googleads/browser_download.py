@@ -1,6 +1,7 @@
 """Browser helpers — re-exports from agentkit.browser, keeps invoice-admin-specific functions."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from selenium import webdriver
@@ -11,7 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from agentkit.browser import (
     ensure_brave_running,
     chrome_driver_attach,
-    chrome_options_for_debugger as build_chrome_options_for_remote_debugging,
+    build_chrome_options_for_remote_debugging,
     build_chrome_options,
 )
 
@@ -25,7 +26,6 @@ def click_and_wait_for_pdf(
     timeout_s: float = 60,
 ) -> Path:
     """Open ``page_url``, click ``#link_id``, return path to a new ``.pdf`` under ``download_dir``."""
-    import time
     download_dir.mkdir(parents=True, exist_ok=True)
     before = {p.resolve() for p in download_dir.glob("*.pdf")}
     driver.get(page_url)

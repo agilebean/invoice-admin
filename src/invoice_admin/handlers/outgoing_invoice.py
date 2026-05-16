@@ -58,7 +58,7 @@ class OutgoingInvoiceHandler:
         *,
         gmail_read_backend: Any,
         smtp_backend: Any,
-        test_run: bool = False,
+        dry_run: bool = False,
         month_label: str | None = None,
         download_dir: Path | None = None,
         to_address: str | None = None,
@@ -79,7 +79,7 @@ class OutgoingInvoiceHandler:
         dropbox_dir = self._expand_path(str(paths["dropbox_invoice_dir"]))
         smtp_sender = str(email["sender"])
         recipient = to_address or (
-            str(email["test_recipient"]) if test_run else str(client["email"])
+            str(email["test_recipient"]) if dry_run else str(client["email"])
         )
         dl = download_dir if download_dir is not None else Path.home() / "Downloads"
         return run_month(
@@ -93,7 +93,7 @@ class OutgoingInvoiceHandler:
             smtp_backend=smtp_backend,
             smtp_sender=smtp_sender,
             to_address=recipient,
-            test_run=test_run,
+            dry_run=dry_run,
             month_label=month_label,
             dropbox_dir=dropbox_dir,
         )
@@ -102,7 +102,7 @@ class OutgoingInvoiceHandler:
         self,
         *,
         gmail_read_backend: Any,
-        test_run: bool = False,
+        dry_run: bool = False,
         downloads_dir: Path | None = None,
         commission_dir: Path | None = None,
         max_scan: int = 10,
@@ -123,7 +123,7 @@ class OutgoingInvoiceHandler:
             commission_query=q,
             max_scan=max_scan,
             commission_dir=dest,
-            test_run=test_run,
+            dry_run=dry_run,
             downloads_dir=downloads_dir,
         )
 
@@ -153,7 +153,7 @@ class OutgoingInvoiceHandler:
             self.send_monthly_invoice(
                 gmail_read_backend=self._gmail_read,
                 smtp_backend=self._smtp,
-                test_run=bool(meta.get("test_run", False)),
+                dry_run=bool(meta.get("dry_run", False)),
                 month_label=meta.get("month_label"),
             )
             tracker.update_status(row.id, "submitted")
@@ -164,7 +164,7 @@ class OutgoingInvoiceHandler:
                 )
             self.save_commission(
                 gmail_read_backend=self._gmail_read,
-                test_run=bool(meta.get("test_run", False)),
+                dry_run=bool(meta.get("dry_run", False)),
             )
             tracker.update_status(row.id, "submitted")
         else:

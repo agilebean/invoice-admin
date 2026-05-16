@@ -399,33 +399,6 @@ class TestCliSend:
         code = main(["send"])
         assert code == 2
 
-    @patch("builtins.input", return_value="y")
-    @patch("invoice_admin.googleads.cli._subject_body_attachment_for_pdf")
-    @patch("invoice_admin.googleads.cli.GmailFacade.send_text_with_pdf_attachment")
-    def test_send_test_run_uses_default_recipient_when_omitted(
-        self,
-        mock_send: MagicMock,
-        mock_subject_body: MagicMock,
-        _mock_input: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        from invoice_admin.googleads.cli import main
-        from invoice_admin.googleads.addresses import DEFAULT_TEST_RECIPIENT
-
-        pdf = tmp_path / "invoice.pdf"
-        pdf.touch()
-        mock_subject_body.return_value = ("subject", "body", "attach.pdf", pdf)
-
-        monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
-        monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
-        monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
-        monkeypatch.delenv("GOOGLEADS_INVOICE_TO", raising=False)
-
-        code = main(["send", "--test-run"])
-        assert code == 0
-        assert mock_send.call_args.kwargs["to"] == DEFAULT_TEST_RECIPIENT
-
 
 def test_cli_send_help_mentions_guard(capsys: pytest.CaptureFixture[str]) -> None:
     from invoice_admin.googleads.cli import main

@@ -39,10 +39,10 @@ def test_send_monthly_invoice_passes_dropbox_from_yaml(monkeypatch) -> None:
     h = OutgoingInvoiceHandler(cfg)
     g = object()
     s = object()
-    h.send_monthly_invoice(gmail_read_backend=g, smtp_backend=s, test_run=True)
+    h.send_monthly_invoice(gmail_read_backend=g, smtp_backend=s, dry_run=True)
     assert calls["gmail_read_backend"] is g
     assert calls["smtp_backend"] is s
-    assert calls["test_run"] is True
+    assert calls["dry_run"] is True
     assert calls["to_address"] == cfg["email"]["test_recipient"]
     exp_drop = Path(cfg["paths"]["dropbox_invoice_dir"]).expanduser().resolve()
     assert calls["dropbox_dir"] == exp_drop

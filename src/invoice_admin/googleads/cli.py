@@ -30,7 +30,7 @@ from invoice_admin.googleads.invoice_artifacts import (
     build_renamed_pdf_filename,
 )
 from invoice_admin.googleads.invoice_pdf import parse_invoice_pdf
-from invoice_admin.googleads.pipeline import format_dry_run_report, run_dry_run
+from invoice_admin.googleads.pipeline import DryRunReport
 from invoice_admin.googleads.save_commission_pdf import SaveCommissionPdfError, save_commission_pdf
 
 _ENV_MAIL_HTML = "GOOGLEADS_INVOICE_MAIL_HTML"
@@ -43,7 +43,7 @@ _ENV_INVOICE_TO = "GOOGLEADS_INVOICE_TO"
 
 
 def _resolve_recipient(to_flag: str | None) -> str:
-    """CLI ``--to`` wins, then ``GOOGLEADS_INVOICE_TO``, else test inbox default."""
+    """CLI ``--to`` wins, then ``GOOGLEADS_INVOICE_TO``, else production default."""
     if to_flag and str(to_flag).strip():
         return str(to_flag).strip()
     env = os.environ.get(_ENV_INVOICE_TO, "").strip()
@@ -76,43 +76,6 @@ def _smtp_app_password_from_env() -> str:
     return os.environ.get(_ENV_SMTP_PW, "").strip()
 
 
-def _path_from_flag_or_env(
-    subparser: argparse.ArgumentParser,
-    flag_value: Path | None,
-    env_key: str,
-    flag_name: str,
-) -> Path:
-    if flag_value is not None:
-        return flag_value.expanduser()
-    raw = os.environ.get(env_key, "").strip()
-    if not raw:
-        subparser.error(
-            f"dry-run needs {flag_name} or {env_key} "
-            "(e.g. HTML exported from Spark, PDF saved from Brave)."
-        )
-    return Path(raw).expanduser()
-
-
-def _subject_body_attachment_for_pdf(
-    pdf_path: Path,
-    *,
-    attachment_name: str | None,
-) -> tuple[str, str, str, Path]:
-    """Shared subject/body/attachment name for ``send --test-run``."""
-    pdf_path = pdf_path.expanduser()
-    if not pdf_path.is_file():
-        raise FileNotFoundError(str(pdf_path))
-    month_label = billing_month_label_for_previous_calendar_month()
-    issue_date, amount_eur = parse_invoice_pdf(pdf_path)
-    fields = InvoiceOutputFields(
-        issue_date=issue_date,
-        amount_eur=amount_eur,
-        month_label=month_label,
-    )
-    subject = build_email_subject(fields)
-    body = build_email_body(fields)
-    attach_name = attachment_name or build_renamed_pdf_filename(fields)
-    return subject, body, attach_name, pdf_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -124,49 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="googleads-invoice")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    dry = sub.add_parser(
-        "dry-run",
-        help="Print billing URL, parsed PDF fields, and Jack email artifacts (no send).",
-    )
-    dry.add_argument(
-        "--mail-html",
-        type=Path,
-        default=None,
-        help=f"Path to saved Gmail-style HTML, or set {_ENV_MAIL_HTML}.",
-    )
-    dry.add_argument(
-        "--invoice-pdf",
-        type=Path,
-        default=None,
-        help=f"Path to invoice PDF, or set {_ENV_INVOICE_PDF}.",
-    )
-
     send_p = sub.add_parser(
         "send",
         help=(
             "Send monthly invoice via Gmail SMTP. "
-            "With --test-run: send a test PDF directly. "
-            "Without --test-run: full monthly flow (Gmail search → Brave download → PDF parse → SMTP send). "
+            "Full monthly flow (Gmail search → Brave download → PDF parse → SMTP send). "
             f"Production send requires {_ENV_CONFIRM_RUN_MONTH}=1, Gmail OAuth token, Brave with "
             "--remote-debugging-port, and SMTP app password."
         ),
-    )
-    send_p.add_argument(
-        "--test-run",
-        action="store_true",
-        default=False,
-        help="Test mode: send a test PDF directly (no Gmail search, no Brave).",
-    )
-    send_p.add_argument(
-        "--pdf",
-        type=Path,
-        default=None,
-        help="Invoice PDF path for --test-run (default: tests/fixtures/pdf/invoice_eur_dot_decimal.pdf).",
-    )
-    send_p.add_argument(
-        "--attachment-name",
-        default=None,
-        help="Optional attachment filename for --test-run (default: build from PDF + billing month).",
     )
     send_p.add_argument(
         "--query",
@@ -200,19 +128,25 @@ def main(argv: list[str] | None = None) -> int:
         "--to",
         default=None,
         help=(
-            f"Recipient for --test-run (default: {_ENV_INVOICE_TO} env or {DEFAULT_TEST_RECIPIENT})."
+            f"Recipient email override (default: {DEFAULT_PRODUCTION_RECIPIENT})."
         ),
     )
+    send_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Download and parse invoice PDF, print fields, skip SMTP send and confirmation.",
+    )
 
-    save_commission_p = sub.add_parser(
-        "save-commission-pdf",
+    save_p = sub.add_parser(
+        "save",
         help=(
             "Search Gmail for commission emails from Jack Copeland, download the PDF attachment, "
             "parse it, and save to the commissions directory (same as monthly invoice Dropbox folder)."
         ),
     )
-    save_commission_p.add_argument(
-        "--test-run",
+    save_p.add_argument(
+        "--dry-run",
         action="store_true",
         default=False,
         help=(
@@ -222,54 +156,14 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "send":
-        if args.test_run:
-            user = _smtp_login_user()
-            try:
-                pw = _smtp_app_password_from_env()
-            except ValueError as e:
-                print(str(e), file=sys.stderr)
-                return 2
-            if not pw:
+        if not args.dry_run:
+            if os.environ.get(_ENV_CONFIRM_RUN_MONTH, "") != "1":
                 print(
-                    f"Set {_ENV_SMTP_PW} or {_ENV_SMTP_PW_FILE} "
-                    "(Gmail app password; prefer file with chmod 600).",
+                    f"Refusing: set {_ENV_CONFIRM_RUN_MONTH}=1 after confirming all "
+                    "secrets, Brave, and recipient are correct.",
                     file=sys.stderr,
                 )
                 return 2
-            pdf_path = args.pdf
-            if pdf_path is None:
-                pdf_path = Path("tests/fixtures/pdf/invoice_eur_dot_decimal.pdf")
-            try:
-                subject, body, attach_name, pdf_resolved = _subject_body_attachment_for_pdf(
-                    pdf_path,
-                    attachment_name=args.attachment_name,
-                )
-            except FileNotFoundError:
-                print(f"PDF not found: {pdf_path.expanduser()}", file=sys.stderr)
-                return 2
-            except Exception as e:
-                print(str(e), file=sys.stderr)
-                return 2
-            to_addr = _resolve_recipient(args.to)
-            facade = GmailFacade(SmtpGmailBackend(user=user, app_password=pw))
-            facade.send_text_with_pdf_attachment(
-                sender=user,
-                to=to_addr,
-                subject=subject,
-                body=body,
-                pdf_path=pdf_resolved,
-                attachment_name=attach_name,
-            )
-            print(f"Sent test PDF to {to_addr!r} (subject: {subject!r}).", file=sys.stderr)
-            return 0
-
-        if os.environ.get(_ENV_CONFIRM_RUN_MONTH, "") != "1":
-            print(
-                f"Refusing: set {_ENV_CONFIRM_RUN_MONTH}=1 after confirming all "
-                "secrets, Brave, and recipient are correct.",
-                file=sys.stderr,
-            )
-            return 2
 
         query = (args.query or "").strip() or billing_mail_query_from_env()
         max_scan = int(args.max_scan)
@@ -291,19 +185,25 @@ def main(argv: list[str] | None = None) -> int:
         else:
             download_dir = dl_dir_raw.expanduser()
 
+        is_dry = args.dry_run
+
         smtp_user = _smtp_login_user()
         try:
             smtp_pw = _smtp_app_password_from_env()
         except ValueError as e:
-            print(str(e), file=sys.stderr)
-            return 2
+            if not is_dry:
+                print(str(e), file=sys.stderr)
+                return 2
+            smtp_pw = "dry-run"
         if not smtp_pw:
-            print(
-                f"Set {_ENV_SMTP_PW} or {_ENV_SMTP_PW_FILE} "
-                "(Gmail app password; prefer file with chmod 600).",
-                file=sys.stderr,
-            )
-            return 2
+            if not is_dry:
+                print(
+                    f"Set {_ENV_SMTP_PW} or {_ENV_SMTP_PW_FILE} "
+                    "(Gmail app password; prefer file with chmod 600).",
+                    file=sys.stderr,
+                )
+                return 2
+            smtp_pw = "dry-run"
 
         to_addr = DEFAULT_PRODUCTION_RECIPIENT
 
@@ -315,29 +215,27 @@ def main(argv: list[str] | None = None) -> int:
 
         smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
 
-        from invoice_admin.googleads.addresses import CC_RECIPIENTS
         month_str = billing_month_label_for_previous_calendar_month()
-        print(
-            f"About to send {month_str} invoice:",
-            file=sys.stderr,
-        )
-        print(f"  To: {to_addr}", file=sys.stderr)
-        print(f"  CC: {', '.join(CC_RECIPIENTS)}", file=sys.stderr)
-        from invoice_admin.googleads.addresses import BCC_RECIPIENTS
-        print(f"  BCC: {', '.join(BCC_RECIPIENTS)}", file=sys.stderr)
-        try:
-            confirm = input("  Confirm? (Y/n): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            confirm = "n"
-        if confirm not in ("", "y", "yes"):
-            print("Aborted.", file=sys.stderr)
-            return 2
+        if is_dry:
+            print(f"DRY RUN — {month_str} invoice (no send):", file=sys.stderr)
+        else:
+            from invoice_admin.googleads.addresses import CC_RECIPIENTS
+            print(f"About to send {month_str} invoice:", file=sys.stderr)
+            print(f"  To: {to_addr}", file=sys.stderr)
+            print(f"  CC: {', '.join(CC_RECIPIENTS)}", file=sys.stderr)
+            from invoice_admin.googleads.addresses import BCC_RECIPIENTS
+            print(f"  BCC: {', '.join(BCC_RECIPIENTS)}", file=sys.stderr)
+            try:
+                confirm = input("  Confirm? (Y/n): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+            if confirm not in ("", "y", "yes"):
+                print("Aborted.", file=sys.stderr)
+                return 2
 
         try:
             from invoice_admin.googleads.run_month import RunMonthError, run_month
-            from invoice_admin.googleads.browser_download import ensure_brave_running
 
-            ensure_brave_running(addr)
             report = run_month(
                 gmail_read_backend=gmail_backend,
                 billing_query=query,
@@ -345,13 +243,20 @@ def main(argv: list[str] | None = None) -> int:
                 debugger_address=addr,
                 download_dir=download_dir,
                 smtp_backend=smtp_backend,
-                smtp_sender=smtp_user,
-                to_address=to_addr,
-                test_run=False,
+                smtp_sender=smtp_user if not is_dry else "dry-run@example.com",
+                to_address=to_addr if not is_dry else "dry-run@example.com",
+                dry_run=is_dry,
             )
         except RunMonthError as e:
             print(str(e), file=sys.stderr)
             return 2
+
+        if is_dry:
+            print(f"  Billing URL: {report.billing_url}", file=sys.stderr)
+            print(f"  Invoice: {report.issue_date}, EUR {report.amount_eur}", file=sys.stderr)
+            print(f"  Filename: {report.renamed_filename}", file=sys.stderr)
+            print("Dry run complete (no email sent).", file=sys.stderr)
+            return 0
 
         print("Invoice sent successfully.", file=sys.stderr)
         print(f"  Billing URL: {report.billing_url}", file=sys.stderr)
@@ -365,22 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Attachment: {report.renamed_filename}", file=sys.stderr)
         return 0
 
-    if args.command == "dry-run":
-        mail_html_path = _path_from_flag_or_env(
-            dry, args.mail_html, _ENV_MAIL_HTML, "--mail-html"
-        )
-        invoice_pdf_path = _path_from_flag_or_env(
-            dry, args.invoice_pdf, _ENV_INVOICE_PDF, "--invoice-pdf"
-        )
-        month_label = billing_month_label_for_previous_calendar_month()
-        report = run_dry_run(
-            mail_html_path=mail_html_path,
-            invoice_pdf_path=invoice_pdf_path,
-            month_label=month_label,
-        )
-        print(format_dry_run_report(report), end="")
-        return 0
-    if args.command == "save-commission-pdf":
+    if args.command == "save":
         query = commission_mail_query_from_env()
 
         try:
@@ -389,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
             print(str(e), file=sys.stderr)
             return 2
 
-        if not args.test_run:
+        if not args.dry_run:
             print(
                 "About to save commission PDF:",
                 file=sys.stderr,
@@ -408,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
             report = save_commission_pdf(
                 gmail_read_backend=backend,
                 commission_query=query,
-                test_run=args.test_run,
+                dry_run=args.dry_run,
             )
         except SaveCommissionPdfError as e:
             print(str(e), file=sys.stderr)
