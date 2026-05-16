@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from googleads_invoice.gmail_facade import (
+from invoice_admin.googleads.gmail_facade import (
     GmailFacade,
     GmailMessageSummary,
     GmailTransportError,

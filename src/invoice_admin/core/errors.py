@@ -1,6 +1,8 @@
 """Domain exceptions for invoice-admin."""
 from __future__ import annotations
 
+import json
+
 
 class InvoiceError(Exception):
     """Base exception for all invoice-admin errors."""
@@ -44,3 +46,8 @@ class NotifyError(InvoiceError):
 
 class FoyerAuthError(HandlerError):
     """Foyer portal authentication failed."""
+
+
+def tracker_error_blob(exc: BaseException) -> str:
+    """Serialize an exception for the tracker ``error`` column (JSON object)."""
+    return json.dumps({"type": type(exc).__name__, "message": str(exc)}, indent=2)

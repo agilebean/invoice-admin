@@ -1,0 +1,10 @@
+{
+  "vendor": "Fixture Vendor LLC",
+  "invoice_date": "2026-01-15",
+  "due_date": null,
+  "amount": 99.99,
+  "currency": "EUR",
+  "iban": null,
+  "bic": null,
+  "verwendungszweck": "INV-001"
+}

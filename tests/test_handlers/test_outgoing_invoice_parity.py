@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from googleads_invoice.pipeline import run_dry_run
+from invoice_admin.googleads.pipeline import run_dry_run
 
 from invoice_admin.core.config import repo_root
 from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler

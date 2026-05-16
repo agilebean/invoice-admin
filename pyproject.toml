@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "invoice-admin"
-version = "0.0.0"
+version = "0.0.1"
 description = "Invoice admin — ingest, classify, route, track; includes Google Ads outgoing invoice automation."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,8 +25,19 @@ googleads-invoice = "googleads_invoice.cli:main"
 invoice = "invoice_admin.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "selenium>=4.15"]
+dev = ["pytest>=8.0", "selenium>=4.15", "mypy>=1.8", "types-PyYAML>=6.0"]
 oauth = ["google-auth-oauthlib>=1.0"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["fints.*"]
+ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/googleads_invoice", "src/invoice_admin"]
@@ -37,6 +48,8 @@ pythonpath = ["src"]
 markers = [
     "e2e: headed browser download (RUN_E2E=1 locally; skipped in CI)",
     "integration: optional live checks (e.g. GOOGLEADS_BILLING_DEEPLINK; default skip in CI)",
+    "live: real network or external runtime (RUN_LIVE=1 locally; skipped in CI)",
     "live_brave: attach to your Brave (RUN_LIVE_BRAVE=1 + debugger + deeplink; skipped in CI)",
     "live_spark: real Spark on macOS (RUN_LIVE_SPARK=1; skipped in CI)",
+    "slow: LLM or large files (skipped in CI; runs locally)",
 ]

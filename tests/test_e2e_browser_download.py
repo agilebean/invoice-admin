@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from selenium import webdriver
 
-from googleads_invoice.browser_download import (
+from invoice_admin.googleads.browser_download import (
     build_chrome_options,
     click_and_wait_for_pdf,
 )

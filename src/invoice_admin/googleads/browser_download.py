@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from selenium import webdriver
@@ -10,6 +15,63 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+
+_BRAVE_PATH_MACOS = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+
+
+def _brave_cdp_ready(address: str, timeout_s: float = 2.0) -> bool:
+    """Return True if Brave's CDP endpoint answers at *address* (host:port)."""
+    try:
+        req = urllib.request.Request(f"http://{address}/json/version")
+        urllib.request.urlopen(req, timeout=timeout_s)
+        return True
+    except Exception:
+        return False
+
+
+def ensure_brave_running(
+    address: str = "127.0.0.1:9222",
+    *,
+    launch_timeout_s: float = 30.0,
+) -> None:
+    """Launch Brave with ``--remote-debugging-port`` if it is not already listening.
+
+    Raises ``RuntimeError`` when Brave does not become ready within
+    *launch_timeout_s* seconds.
+    """
+    if _brave_cdp_ready(address):
+        return
+
+    binary = _BRAVE_PATH_MACOS
+    if not Path(binary).exists():
+        # Not on macOS or Brave not in standard location — trust the caller
+        # to have the browser running already.
+        raise RuntimeError(
+            f"Brave not found at {binary!r} and is not listening on {address}. "
+            "Start Brave manually with --remote-debugging-port first."
+        )
+
+    host, _, port_str = address.partition(":")
+    port = int(port_str)
+
+    with open(os.devnull, "w") as devnull:
+        subprocess.Popen(
+            [binary, f"--remote-debugging-port={port}", "--no-first-run", "--disable-extensions"],
+            stdout=devnull,
+            stderr=devnull,
+            start_new_session=True,
+        )
+
+    print(f"Launched Brave (port {port}), waiting up to {launch_timeout_s:.0f}s...", file=sys.stderr)
+    deadline = time.monotonic() + launch_timeout_s
+    while time.monotonic() < deadline:
+        if _brave_cdp_ready(address):
+            print("Brave ready.", file=sys.stderr)
+            return
+        time.sleep(0.5)
+    raise RuntimeError(
+        f"Brave did not become ready on {address} within {launch_timeout_s:.0f}s."
+    )
 
 
 def build_chrome_options(

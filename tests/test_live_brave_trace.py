@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from googleads_invoice.live_brave_trace import (
+from invoice_admin.googleads.live_brave_trace import (
     live_brave_trace_dir,
     live_brave_trace_enabled,
     maybe_save_live_brave_trace,

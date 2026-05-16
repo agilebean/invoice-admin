@@ -12,14 +12,24 @@ from invoice_admin.core.errors import ConfigError
 
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point. Dispatches to subcommands."""
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # --- `invoice googleads …` — forward entire remainder to googleads_invoice
+    if len(argv) >= 1 and argv[0] == "googleads":
+        os.environ["_GOOGLEADS_INVOICE_VIA_S6"] = "1"
+        from invoice_admin.googleads.cli import main as ga_main
+
+        return ga_main(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="invoice",
         description="Generic invoice handler — ingest, classify, route, track",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_ingest = sub.add_parser("ingest", help="Ingest an invoice from a PDF file")
-    p_ingest.add_argument("path", nargs="?", type=Path, default=None, help="Path to PDF file")
+    p_ingest = sub.add_parser("ingest", help="Ingest an invoice from a PDF file (defaults to newest PDF from inbox)")
+    p_ingest.add_argument("path", nargs="?", type=Path, default=None, help="Path to PDF file (default: newest .pdf in inbox)")
     p_ingest.add_argument(
         "--email",
         dest="spark_link",
@@ -68,7 +78,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Confirm restoring classification from review notes",
     )
 
-    sub.add_parser("cost", help="Show LLM cost dashboard (last 7/30 days)")
+    # Listed for help visibility only; actual dispatch is intercepted above.
+    sub.add_parser(
+        "googleads",
+        help="Google Ads invoice and commission flows (passthrough to googleads-invoice)",
+    )
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     try:
@@ -96,8 +110,6 @@ def _dispatch(args: argparse.Namespace, config: object) -> int:
         return _cmd_retry(args, config)
     if args.command == "review":
         return _cmd_review(args, config)
-    if args.command == "cost":
-        return _cmd_cost(args, config)
     return 1
 
 
@@ -113,49 +125,64 @@ def _cmd_ingest(args: argparse.Namespace, config: object) -> int:
         return 2
 
     if args.spark_link:
-        from invoice_admin.core.imap import fetch_email_by_message_id
         from invoice_admin.core.spark_link import message_id_from_spark_open_url
-        from invoice_admin.sources.email_source import ingest_email
+        from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
 
         try:
             mid = message_id_from_spark_open_url(args.spark_link)
         except ValueError as e:
             print(f"ingest: {e}", file=sys.stderr)
             return 2
-        host = os.environ.get("INVOICE_ADMIN_IMAP_HOST", "").strip()
-        user = os.environ.get("INVOICE_ADMIN_IMAP_USER", "").strip()
-        pw = os.environ.get("INVOICE_ADMIN_IMAP_PASSWORD", "").strip()
-        mbox = os.environ.get("INVOICE_ADMIN_IMAP_MAILBOX", "INBOX").strip() or "INBOX"
-        if not host or not user or not pw:
-            print(
-                "ingest --email needs INVOICE_ADMIN_IMAP_HOST, INVOICE_ADMIN_IMAP_USER, "
-                "INVOICE_ADMIN_IMAP_PASSWORD (optional INVOICE_ADMIN_IMAP_MAILBOX).",
-                file=sys.stderr,
-            )
-            return 2
+
         try:
-            em = fetch_email_by_message_id(host, user, pw, mid, mailbox=mbox)
-        except OSError as e:
-            print(f"IMAP connection failed: {e}", file=sys.stderr)
+            gmail = GmailApiReadBackend.from_env()
+        except ValueError as e:
+            print(f"ingest: Gmail auth — {e}", file=sys.stderr)
+            return 2
+
+        gmail_msg_id = gmail.find_by_rfc822_message_id(mid)
+        if gmail_msg_id is None:
+            print(f"ingest: no Gmail message found for {mid!r}", file=sys.stderr)
             return 1
-        except Exception as e:
-            print(f"IMAP fetch failed: {e}", file=sys.stderr)
+
+        trio = gmail.get_message_pdf_with_metadata(gmail_msg_id)
+        if trio is None:
+            print("ingest: email found but has no PDF attachment", file=sys.stderr)
             return 1
-        if em is None:
-            print("no message found with that Message-ID", file=sys.stderr)
-            return 1
+        pdf_bytes, subject, _internal_ms = trio
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+            tf.write(pdf_bytes)
+            tmp_pdf = Path(tf.name)
+
         try:
             with Tracker(paths.tracker_path) as tracker:
                 llm = LLMProvider(log_path=paths.llm_calls_path)
-                rid = ingest_email(em, tracker, llm, config)
+                rid = ingest_pdf_file(tmp_pdf, tracker, llm, config)
+        except FileNotFoundError as e:
+            print(str(e), file=sys.stderr)
+            tmp_pdf.unlink(missing_ok=True)
+            return 1
         except Exception as e:
             print(f"ingest failed: {e}", file=sys.stderr)
+            tmp_pdf.unlink(missing_ok=True)
             return 1
+        tmp_pdf.unlink(missing_ok=True)
         if rid is None:
-            print("already ingested (same Message-ID)", flush=True)
+            print("already ingested (same file hash)", flush=True)
             return 0
-        print(f"ingested tracker id={rid}", flush=True)
+        print(f"ingested tracker id={rid} (subject: {subject})", flush=True)
         return 0
+
+    if args.path is None and not args.spark_link:
+        inbox = Path(paths.inbox_dir)
+        pdfs = sorted(inbox.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True) if inbox.is_dir() else []
+        if not pdfs:
+            print(f"ingest: no path given and no PDFs found in inbox ({inbox})", file=sys.stderr)
+            return 2
+        args.path = pdfs[0]
+        print(f"ingest: using newest inbox PDF: {args.path}", file=sys.stderr)
 
     if args.path is None:
         print("ingest: provide a PDF path or --email with a Spark link", file=sys.stderr)
@@ -219,6 +246,8 @@ def _cmd_watch(args: argparse.Namespace, config: object) -> int:
 
     from invoice_admin.sources.file_source import watch_inbox
 
+    inbox = str(paths.inbox_dir)
+    print(f"Watching {inbox} for new PDFs (Ctrl-C to stop)...", flush=True)
     try:
         with Tracker(paths.tracker_path) as tracker:
             llm = LLMProvider(log_path=paths.llm_calls_path)
@@ -289,10 +318,10 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
         print("send: missing config/handlers/outgoing_gluggle.yaml", file=sys.stderr)
         return 2
 
-    from googleads_invoice.addresses import DEFAULT_PRODUCTION_RECIPIENT, DEFAULT_TEST_RECIPIENT
-    from googleads_invoice.cli import _smtp_app_password_from_env, _smtp_login_user
-    from googleads_invoice.gmail_api_backend import GmailApiReadBackend
-    from googleads_invoice.gmail_smtp import SmtpGmailBackend
+    from invoice_admin.googleads.addresses import DEFAULT_PRODUCTION_RECIPIENT, DEFAULT_TEST_RECIPIENT
+    from invoice_admin.googleads.cli import _smtp_app_password_from_env, _smtp_login_user
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.googleads.gmail_smtp import SmtpGmailBackend
 
     from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
 
@@ -330,7 +359,7 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
             print("Aborted.", file=sys.stderr)
             return 2
 
-    from googleads_invoice.run_month import RunMonthError
+    from invoice_admin.googleads.run_month import RunMonthError
 
     try:
         handler.send_monthly_invoice(

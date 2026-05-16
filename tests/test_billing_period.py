@@ -1,6 +1,6 @@
 from datetime import date
 
-from googleads_invoice.billing_period import (
+from invoice_admin.googleads.billing_period import (
     billing_month_label_for_previous_calendar_month,
 )
 

@@ -1,6 +1,6 @@
 # Implementation Plan — invoice-admin Refactor
 
-> Written for a coding LLM. Every instruction is prescriptive. No ambiguity. No room for creative interpretation. Read the **Agent execution contract** (section immediately below), then the rest of this file, before writing any code.
+> Written for a coding LLM. Every instruction is prescriptive. No ambiguity. No room for creative interpretation. Read the **Agent execution contract** (section immediately below), then **Implementation status (living)**, then the rest of this file, before writing any code.
 
 ---
 
@@ -13,7 +13,7 @@ This block exists so a maintainer can prompt with **only**: *“Read `docs/IMPLE
 When instructions conflict, resolve in this **strict order** (higher wins):
 
 1. **Explicit text in the user’s current chat** that names a milestone (e.g. “implement **M5.1** only”) or a file path.
-2. **This file** (`IMPLEMENTATION_PLAN_invoice_handler.md`) — milestones **§2**, hard rules **§3**, tests **§4**, ordered checklist **§5**.
+2. **This file** (`IMPLEMENTATION_PLAN_invoice_handler.md`) — **Implementation status (living)** first, then milestones **§2**, hard rules **§3**, tests **§4**, ordered checklist **§5**, backlog **§5.1**.
 3. **`docs/PROJECT_BRIEF_invoice_handler.md`** — product facts; if it disagrees with **this file** on *how* `invoice_admin` should behave, **this file wins**.
 4. **`PLAN.md`** — agile ritual, CI policy, **P1** (merge `googleads_invoice` into `invoice_admin`), and the **Google Ads backward plan** (`googleads_invoice` / `run-month`). Those are **mostly out of scope** for M1–M7 unless a milestone here explicitly says to touch them.
 5. **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** — narrative context only; **not** an alternate task list for `invoice_admin` milestones.
@@ -35,7 +35,7 @@ When instructions conflict, resolve in this **strict order** (higher wins):
 Use **one** of these shapes; do not invent new scope sentences.
 
 - **Next step (default):**  
-  *“Read `docs/IMPLEMENTATION_PLAN_invoice_handler.md` (including the Agent execution contract). Run the full fast `pytest` suite. Implement the **next** open row in **§5 Summary — Step Order** that is not yet satisfied in the codebase. Do not start P1. Stop when tests are green and list what you changed.”*
+  *“Read `docs/IMPLEMENTATION_PLAN_invoice_handler.md` (contract + **Implementation status**). Run **`python -m pytest`** and **`mypy src/invoice_admin/core src/invoice_admin/classify src/invoice_admin/handlers`** (after `pip install -e ".[dev]"`). Implement the **next not-done** row in **Implementation status** (or the **§5** table if that section says §5 is open). Do not start **P1 / S7** without explicit approval. Stop when both are green; update **Implementation status** + **Status log**.”*
 
 - **Named milestone only:**  
   *“Read the implementation plan. Implement **M4.2** exactly as written in §2. No other milestones. Tests must stay green.”*
@@ -43,7 +43,7 @@ Use **one** of these shapes; do not invent new scope sentences.
 - **Bugfix / regression:**  
   *“Read §3 Hard Rules and §4 Test Strategy. Add a **failing** test that reproduces [symptom], then minimal production fix. Do not change milestones not listed: [Mx.y].”*
 
-If the user’s message is vague and **does not** select a milestone, the agent asks **exactly one** clarifying question: *“Should I continue from §5 next open step, or implement milestone **M\_\_.\_**?”* — then **stop** until answered.
+If the user’s message is vague and **does not** select a milestone, the agent asks **exactly one** clarifying question: *“Should I continue from **Implementation status** (next **S\_** slice), or implement milestone **M\_\_.\_**?”* — then **stop** until answered.
 
 ### 4) Permissions, environment, and “what to run”
 
@@ -100,9 +100,58 @@ Use **“Follow-up (code)”** only for **the next milestone or a concrete bug**
 | Milestone steps, warnings, patterns | **§2 Implementation Steps — By Milestone** |
 | Non-negotiables | **§3 Hard Rules** |
 | What tests to add / markers | **§4 Test Strategy** |
-| Ordered checklist for dumb execution | **§5 Summary — Step Order for the Coding LLM** |
+| **Living progress** | **Implementation status** (start here when resuming) |
 | File naming nitpicks | **§6 File Naming Convention Reference** |
 | External refs | **§7 References** |
+
+---
+
+## Implementation status (living — read before “continue”)
+
+**Rule:** Any agent that completes work on this plan’s backlog **must** (1) set the matching **Resume checklist** row to **Done** (or update **Not started** / **In progress**), (2) append one line to **Status log**, (3) refresh **What is still in scope** if the remaining set changed. Another LLM should need **only this section + §3 Hard Rules** to pick up safely.
+
+### Resume checklist
+
+| ID | Item | State |
+|----|------|--------|
+| **§5** | All rows **M1.1 … Post** (Summary — Step Order) | **Done** |
+| **S1** | §4 test harness (`tests/fixtures/llm_responses/`, `live` / `slow` markers + `conftest.py`) | **Done** |
+| **S2** | Package version / `invoice_admin.__init__` policy | **Done** |
+| **S3** | `REFACTOR_PLAN.md` (brief §0c) | **Done** |
+| **S4** | Static typing: **mypy** on `src/invoice_admin/core/`, `classify/`, `handlers/` (+ CI) | **Done** |
+| **S5** | README + hand-off surfacing (brief M7 / §15) | **Done** |
+| **S6** | Retire / demote **`googleads-invoice`** entry (needs **explicit** parity sign-off) | **Done** |
+| **S7** | **P1** — merge `googleads_invoice` into `invoice_admin` | **Done** |
+| **Post-M7** | SEPA go-live: human checklist → `dry_run: false` in YAML | **Not started** (ops + config; §2 Post-M7) |
+
+### Optional / outside the S1–S7 queue
+
+- **§4 fixtures:** sample extraction JSON lives at **`tests/fixtures/llm_responses/extraction_valid_min.json`** (see `tests/test_fixtures/test_llm_response_fixtures.py`). Add more files when golden LLM I/O should be locked.
+- **`PLAN.md` backward plan §10.x:** maintainer live Gmail / Brave / `run-month` checks — parallel **verification** track, not an **S\*** coding slice unless a row is added above.
+
+### Blocked until maintainer says so in chat
+
+*(No slices currently blocked — all S1–S7 are complete. Post-M7 SEPA go-live is the only remaining item and is operational, not a coding slice.)*
+
+### What is still in scope (refactor coding track)
+
+**Next default coding slice:** none — all S1–S7 slices are **Done**.  
+**Gated (no code until approved):** *(none remaining)*  
+**Operational (human):** **Post-M7** SEPA flip — not a coding slice.
+
+### Status log (append-only; newest last)
+
+| Date (UTC) | Change |
+|------------|--------|
+| 2026-05-12 | **S1** done — `llm_responses/` placeholder; `live` / `slow` markers + CI skip rules in `conftest.py`. |
+| 2026-05-12 | **S2** done — `pyproject.toml` `version = 0.0.1`; `invoice_admin.__init__` + smoke test vs `importlib.metadata`. |
+| 2026-05-12 | **S3** done — `REFACTOR_PLAN.md`; §5.1 S3 row marked shipped. |
+| 2026-05-12 | **Living status** — this section added; contract + prompts point here for resume. |
+| 2026-05-12 | **S4** done — `mypy` on `core/`, `classify/`, `handlers/`; `types-PyYAML` + `[tool.mypy]`; CI runs `mypy …`; small typing fixes (`tracker`, `imap`, `notify`). |
+| 2026-05-12 | **S5** done — README: rename note, hand-off table (brief §15), `invoice_admin` config/env, pytest+mypy, doc index + `src/invoice_admin` in contents. |
+| 2026-05-12 | **Optional §4** — `tests/fixtures/llm_responses/extraction_valid_min.json` + `tests/test_fixtures/test_llm_response_fixtures.py`; **Blocked** subsection for S6/S7 explicit chat approval. |
+| 2026-05-13 | **S6** done — `invoice googleads <subcommand>` passthrough group (REMAINDER forwarding to `googleads_invoice.cli:main`); deprecation warning on `googleads-invoice` entrypoint when not called via `invoice googleads`; `scripts/run-monthly.sh` updated to prefer `invoice googleads run-month`; README CLI section reordered. |
+| 2026-05-13 | **S7 / P1** done — 19 modules moved from `src/googleads_invoice/` → `src/invoice_admin/googleads/`; all self-imports updated (`from googleads_invoice.X` → `from invoice_admin.googleads.X`); all test imports + 33 `@patch`/monkeypatch strings updated; `googleads_invoice` replaced with thin PEP 562 `sys.meta_path` shim that redirects submodule imports to `invoice_admin.googleads`; `__main__.py` delegates to `invoice_admin.googleads.cli:main`; `pyproject.toml` wheel unchanged (shim still included); `scripts/run-monthly.sh` simplified; README updated.
 
 ---
 
@@ -1751,9 +1800,11 @@ All 22 test files in `tests/` remain in place and must continue passing. Do not 
 ```python
 # In conftest.py (extend existing)
 pytest.mark.e2e       # Requires live Foyer portal or FinTS endpoint (skip in CI)
-pytest.mark.live      # Requires real browser or network (skip in CI)
-pytest.mark.slow      # LLM calls or large file processing (skip in CI)
+pytest.mark.live      # Requires real browser or network (skip in CI unless RUN_LIVE=1; see §5.1 S1)
+pytest.mark.slow      # LLM calls or large file processing (skip in CI; runs locally)
 ```
+
+Registered in `pyproject.toml` under `[tool.pytest.ini_options]` **markers** alongside **`live_brave`**, **`live_spark`**, **`integration`**. Reserved mock LLM strings live under **`tests/fixtures/llm_responses/`** (see §5.1 **S1**).
 
 ---
 
@@ -1792,6 +1843,24 @@ Execute in this order. Each step depends on the previous. Do not skip ahead.
 | **M7.4** | `__main__.py` | Thin entry point |
 | **M7.6** | Cost dashboard | `invoice cost` subcommand |
 | **Post** | YAML configs for all handlers | Default + handler configs |
+
+### 5.1 Post-checklist backlog slices (smallest → largest scope)
+
+Execute **after** the §5 table is satisfied in the codebase. Order is **by implementation diff size / risk**, not by brief narrative order. **P1** stays last and requires an explicit maintainer go-ahead (see contract §7).
+
+| Slice | Name | Scope (smallest … largest) | Primary deliverable | Notes |
+|-------|------|----------------------------|---------------------|--------|
+| **S1** | §4 test harness polish | **Smallest** | `tests/fixtures/llm_responses/` (reserved tree) + `pytest` markers **`live`** / **`slow`** registered in `pyproject.toml` with **CI skip rules** in `tests/conftest.py` matching §4 Test Strategy | Does not mark existing tests; markers exist for future use. Generic **`live`** is separate from **`live_brave`** / **`live_spark`**. |
+| **S2** | Package export polish | Small | `invoice_admin/__init__.py` **`__all__`** / `__version__` aligned with §2 **M7.5** + `pyproject.toml` version policy (document choice: distribution vs import package) | Cosmetic / consistency only. |
+| **S3** | `REFACTOR_PLAN.md` | Medium (writing) | Repo-root **`REFACTOR_PLAN.md`**: (1) disposition of current modules, (2) **swim** patterns adopted — per **Project brief §0c** | **Shipped** (this file). No runtime behavior. |
+| **S4** | Static typing tranche | Medium–large | **`mypy`** on `src/invoice_admin/core`, `classify`, `handlers` per brief §13; CI + `[tool.mypy]` in `pyproject.toml` | **Done** (override for untyped `fints.*`; `types-PyYAML` for `yaml`). |
+| **S5** | README + hand-off surfacing | Large (docs) | README updates: setup, **`invoice`** vs **`googleads-invoice`**, env index, pointer to **`docs/REAL_WORKFLOW_AND_PREFLIGHT.md`**, rename history if still relevant — per brief **M7** / §15 checkpoints summarized | **Done** |
+| **S6** | Retire / demote legacy entrypoint | Large (policy + code) | Only after **explicit** parity sign-off (brief §15 “Before M6…”): shrink or remove **`googleads-invoice`** surface area per maintainer decision | Couples packaging, docs, and muscle memory — not automatic after S5. |
+| **S7** | **P1** — merge `googleads_invoice` into `invoice_admin` | **Largest** | Single-package layout per **`PLAN.md`** post-plan backlog; shim or delete standalone package; update all imports and wheel config | **Do not start** until approved; run full parity + `run-month` / dry-run checks. |
+
+**Agent default after §5:** read **Implementation status** → next open row (**S6** / **S7** are **gated**—do not start without maintainer chat approval). After each coding slice: **green `python -m pytest`** and **`mypy src/invoice_admin/core src/invoice_admin/classify src/invoice_admin/handlers`** whenever `src/invoice_admin/` under those trees changes, then **update Implementation status + Status log**.
+
+**Maintainer upkeep:** When a slice completes, edit **Resume checklist** and append **Status log** in the same PR / push as the code — do not leave status stale.
 
 ---
 

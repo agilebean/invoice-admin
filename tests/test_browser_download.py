@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from googleads_invoice.browser_download import (
+from invoice_admin.googleads.browser_download import (
     build_chrome_options,
     build_chrome_options_for_remote_debugging,
 )

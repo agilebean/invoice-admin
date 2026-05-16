@@ -56,3 +56,29 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_live_spark_ci)
         elif not run_live_spark:
             item.add_marker(skip_live_spark_env)
+
+    run_live = os.environ.get("RUN_LIVE", "") == "1"
+    skip_live_ci = pytest.mark.skip(
+        reason="live: skipped in CI (needs real network or external runtime)",
+    )
+    skip_live_env = pytest.mark.skip(
+        reason="live: set RUN_LIVE=1 for tests that need real network or external services",
+    )
+    for item in items:
+        if "live" not in item.keywords:
+            continue
+        if "live_brave" in item.keywords or "live_spark" in item.keywords:
+            continue
+        if in_ci:
+            item.add_marker(skip_live_ci)
+        elif not run_live:
+            item.add_marker(skip_live_env)
+
+    skip_slow_ci = pytest.mark.skip(
+        reason="slow: skipped in CI (LLM or large files; set policy in IMPLEMENTATION_PLAN §5.1 S1)",
+    )
+    for item in items:
+        if "slow" not in item.keywords:
+            continue
+        if in_ci:
+            item.add_marker(skip_slow_ci)

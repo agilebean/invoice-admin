@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from googleads_invoice.addresses import DEFAULT_GMAIL_SENDER, PRODUCTION_RECIPIENT_JACK
-from googleads_invoice.pipeline import DryRunReport, format_dry_run_report, run_dry_run
+from invoice_admin.googleads.addresses import DEFAULT_GMAIL_SENDER, PRODUCTION_RECIPIENT_JACK
+from invoice_admin.googleads.pipeline import DryRunReport, format_dry_run_report, run_dry_run
 
 
 def test_format_dry_run_report_includes_mailbox_line() -> None:

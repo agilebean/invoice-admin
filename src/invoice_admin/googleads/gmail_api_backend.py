@@ -14,7 +14,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
+from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
 
 _ENV_OAUTH_TOKEN = "GOOGLE_OAUTH_TOKEN"
 
@@ -249,6 +249,15 @@ class GmailApiReadBackend:
         """Return first PDF attachment body as bytes, or ``None`` if none match."""
         trio = self.get_message_pdf_with_metadata(message_id)
         return None if trio is None else trio[0]
+
+    def find_by_rfc822_message_id(self, message_id: str) -> str | None:
+        """Search Gmail for a message by its RFC822 Message-ID header.
+
+        Returns the Gmail message id (``msg_id`` usable with ``get_message_html`` /
+        ``get_message_pdf_with_metadata``) or ``None`` if not found.
+        """
+        results = self.list_messages(f"rfc822msgid:{message_id}", max_results=1)
+        return results[0].id if results else None
 
     def send_plain_text(
         self,

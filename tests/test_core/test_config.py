@@ -95,3 +95,17 @@ def test_load_config_missing_default_raises(tmp_path: Path, monkeypatch: pytest.
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
     with pytest.raises(ConfigError):
         load_config(tmp_path)
+
+
+def test_shipped_config_tree_has_default_handler_yamls_and_examples_path() -> None:
+    """Post-M7: default.yaml, all handler YAMLs, and classifier_examples path exist in-repo."""
+    root = Path(__file__).resolve().parents[2]
+    assert (root / "config" / "default.yaml").is_file()
+    for name in ("foyer.yaml", "sepa_vr_landau.yaml", "outgoing_gluggle.yaml"):
+        assert (root / "config" / "handlers" / name).is_file(), f"missing {name}"
+    examples = root / "config" / "classifier_examples.jsonl"
+    assert examples.is_file()
+    cfg = load_config(root)
+    assert cfg.paths.classifier_examples_path == examples.resolve()
+    keys = set(cfg.raw["handlers"].keys())
+    assert keys == {"foyer", "outgoing_gluggle", "sepa_vr_landau"}

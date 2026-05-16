@@ -1,4 +1,5 @@
 """Spark deep-link generator."""
+
 from __future__ import annotations
 
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -22,13 +23,34 @@ def spark_link_with_fallback(
 
 
 def message_id_from_spark_open_url(url: str) -> str:
-    """Parse RFC822 Message-ID from ``readdle-spark://openmessage?messageId=...``."""
+    """Parse RFC822 Message-ID from a Spark URL.
+
+    Accepted formats:
+
+    * ``readdle-spark://openmessage?messageId=<RFC822 Message-ID>``
+    * ``https://app.sparkmailapp.com/web-share/<share-id>`` — the share-id
+      portion is returned as-is for use as a Gmail search key.
+    """
     raw = url.strip()
-    if not raw.lower().startswith("readdle-spark://"):
-        raise ValueError("URL must start with readdle-spark://")
-    qs = urlparse(raw).query
-    params = parse_qs(qs, keep_blank_values=False)
-    for key in ("messageId", "messageid"):
-        if key in params and params[key] and params[key][0]:
-            return unquote(params[key][0])
-    raise ValueError("Spark URL has no messageId query parameter")
+    lower = raw.lower()
+
+    # Spark deep-link
+    if lower.startswith("readdle-spark://"):
+        qs = urlparse(raw).query
+        params = parse_qs(qs, keep_blank_values=False)
+        for key in ("messageId", "messageid"):
+            if key in params and params[key] and params[key][0]:
+                return unquote(params[key][0])
+        raise ValueError("Spark URL has no messageId query parameter")
+
+    # Spark web-share
+    if lower.startswith("https://app.sparkmailapp.com/web-share/"):
+        parsed = urlparse(raw)
+        share_id = parsed.path.rsplit("/", 1)[-1].strip()
+        if not share_id:
+            raise ValueError("Spark web-share URL has no share id")
+        return share_id
+
+    raise ValueError(
+        "URL must start with readdle-spark:// or https://app.sparkmailapp.com/web-share/"
+    )

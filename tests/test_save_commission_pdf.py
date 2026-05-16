@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from googleads_invoice.gmail_facade import GmailMessageSummary
-from googleads_invoice.save_commission_pdf import SaveCommissionPdfError, save_commission_pdf
+from invoice_admin.googleads.gmail_facade import GmailMessageSummary
+from invoice_admin.googleads.save_commission_pdf import SaveCommissionPdfError, save_commission_pdf
 
 
 @pytest.fixture
@@ -206,7 +206,7 @@ class TestCliSaveCommissionPdf:
     def test_test_run_skips_confirmation(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
         mock_report = MagicMock()
@@ -218,10 +218,10 @@ class TestCliSaveCommissionPdf:
 
         with (
             patch(
-                "googleads_invoice.cli.GmailApiReadBackend.from_env",
+                "invoice_admin.googleads.cli.GmailApiReadBackend.from_env",
             ),
             patch(
-                "googleads_invoice.cli.save_commission_pdf",
+                "invoice_admin.googleads.cli.save_commission_pdf",
                 return_value=mock_report,
             ) as mock_save,
         ):
@@ -235,7 +235,7 @@ class TestCliSaveCommissionPdf:
         mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
         mock_report = MagicMock()
@@ -246,9 +246,9 @@ class TestCliSaveCommissionPdf:
         mock_report.renamed_filename = "2026-04 Commission April €1,234.56.pdf"
 
         with (
-            patch("googleads_invoice.cli.GmailApiReadBackend.from_env"),
+            patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env"),
             patch(
-                "googleads_invoice.cli.save_commission_pdf",
+                "invoice_admin.googleads.cli.save_commission_pdf",
                 return_value=mock_report,
             ) as mock_save,
         ):
@@ -262,17 +262,17 @@ class TestCliSaveCommissionPdf:
         mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
-        with patch("googleads_invoice.cli.GmailApiReadBackend.from_env"):
+        with patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env"):
             code = main(["save-commission-pdf"])
             assert code == 2
 
     def test_errors_when_oauth_missing(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
         code = main(["save-commission-pdf", "--test-run"])
@@ -280,7 +280,7 @@ class TestCliSaveCommissionPdf:
 
 
 def test_cli_save_commission_pdf_help_lists_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
-    from googleads_invoice.cli import main
+    from invoice_admin.googleads.cli import main
 
     with pytest.raises(SystemExit):
         main(["save-commission-pdf", "--help"])

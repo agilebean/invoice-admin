@@ -10,8 +10,8 @@ import os
 import pytest
 from selenium.webdriver.support.ui import WebDriverWait
 
-from googleads_invoice.browser_download import chrome_driver_attach
-from googleads_invoice.live_brave_trace import maybe_save_live_brave_trace
+from invoice_admin.googleads.browser_download import chrome_driver_attach
+from invoice_admin.googleads.live_brave_trace import maybe_save_live_brave_trace
 
 
 @pytest.mark.live_brave

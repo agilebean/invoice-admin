@@ -3,10 +3,11 @@ max_auto_amount_eur: 2000
 classifier_min_confidence: 0.7
 
 models:
-  fast: claude-haiku-4-5
-  smart: claude-opus-4-7
-  cheap: deepseek/deepseek-chat
-  local: ollama/llama3.1:70b
+  fast: openai/deepseek/deepseek-v4-flash
+  smart: openai/deepseek/deepseek-v4-pro
+  cheap: openai/minimax-m2.5
+  # local model resolved via LM_STUDIO_MODEL env (default Qwen3.5 4B MLX)
+  local: openai/local-model
 
 notify:
   ntfy_topic: null

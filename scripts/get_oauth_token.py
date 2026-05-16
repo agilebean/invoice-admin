@@ -8,14 +8,16 @@ Usage
 
 1. Go to https://console.cloud.google.com/
 2. Enable **Gmail API** and **Google Ads API**
-3. Add both scopes to OAuth consent screen:
+3. Add all scopes to OAuth consent screen:
    - ``https://www.googleapis.com/auth/gmail.readonly``
+   - ``https://www.googleapis.com/auth/gmail.send``
    - ``https://www.googleapis.com/auth/adwords``
 4. Create OAuth credentials → **Desktop app** → download JSON
 5. Run this script, paste the path to that JSON when prompted
 
 The token grants:
 - Gmail read-only access (search inbox, download messages)
+- Gmail send access (digest email delivery)
 - Google Ads billing access
 """
 
@@ -27,6 +29,7 @@ from pathlib import Path
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/adwords",
 ]
 

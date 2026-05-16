@@ -31,11 +31,11 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from googleads_invoice.browser_download import chrome_driver_attach
-from googleads_invoice.live_brave_trace import save_live_brave_trace
-from googleads_invoice.billing_period import billing_month_label_for_previous_calendar_month
-from googleads_invoice.invoice_pdf import parse_invoice_pdf
-from googleads_invoice.invoice_artifacts import InvoiceOutputFields
+from invoice_admin.googleads.browser_download import chrome_driver_attach
+from invoice_admin.googleads.live_brave_trace import save_live_brave_trace
+from invoice_admin.googleads.billing_period import billing_month_label_for_previous_calendar_month
+from invoice_admin.googleads.invoice_pdf import parse_invoice_pdf
+from invoice_admin.googleads.invoice_artifacts import InvoiceOutputFields
 
 
 class LiveBraveDownloadError(RuntimeError):

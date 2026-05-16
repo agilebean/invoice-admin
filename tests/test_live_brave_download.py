@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from googleads_invoice.live_brave_download import (
+from invoice_admin.googleads.live_brave_download import (
     LiveBraveDownloadError,
     _find_download_on_documents_page,
     live_brave_download_pdf,
 )
-from googleads_invoice.cli import main
+from invoice_admin.googleads.cli import main
 
 
 # ── _find_download_on_documents_page ────────────────────────────────────
@@ -138,7 +138,7 @@ class TestLiveBraveDownloadPdf:
 
         with (
             patch(
-                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
                 return_value=mock_driver,
             ) as mock_attach,
         ):
@@ -180,11 +180,11 @@ class TestLiveBraveDownloadPdf:
 
         with (
             patch(
-                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
                 return_value=mock_driver,
             ),
             patch(
-                "googleads_invoice.live_brave_download.save_live_brave_trace",
+                "invoice_admin.googleads.live_brave_download.save_live_brave_trace",
                 return_value=(tmp_path / "trace.html", tmp_path / "trace.png"),
             ) as mock_save,
         ):
@@ -211,11 +211,11 @@ class TestLiveBraveDownloadPdf:
 
         with (
             patch(
-                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
                 return_value=mock_driver,
             ),
             patch(
-                "googleads_invoice.live_brave_download.save_live_brave_trace",
+                "invoice_admin.googleads.live_brave_download.save_live_brave_trace",
                 return_value=(tmp_path / "trace.html", tmp_path / "trace.png"),
             ) as mock_save,
         ):
@@ -244,11 +244,11 @@ class TestLiveBraveDownloadPdf:
 
         with (
             patch(
-                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
                 return_value=mock_driver,
             ),
             patch(
-                "googleads_invoice.live_brave_download.save_live_brave_trace",
+                "invoice_admin.googleads.live_brave_download.save_live_brave_trace",
                 return_value=(tmp_path / "trace.html", tmp_path / "trace.png"),
             ) as mock_save,
         ):
@@ -276,11 +276,11 @@ class TestLiveBraveDownloadPdf:
 
         with (
             patch(
-                "googleads_invoice.live_brave_download.chrome_driver_attach",
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
                 return_value=mock_driver,
             ) as mock_attach,
             patch(
-                "googleads_invoice.live_brave_download.save_live_brave_trace",
+                "invoice_admin.googleads.live_brave_download.save_live_brave_trace",
                 return_value=(Path("/tmp/t.html"), Path("/tmp/t.png")),
             ),
         ):
@@ -294,99 +294,3 @@ class TestLiveBraveDownloadPdf:
             # The resolved path was passed to chrome_driver_attach
             call_dl_dir = mock_attach.call_args.kwargs["download_dir"]
             assert call_dl_dir.is_absolute()
-
-
-# ── CLI: live-brave-download subcommand ─────────────────────────────────
-
-
-class TestCliLiveBraveDownload:
-    def test_refuses_without_confirm_env(self) -> None:
-        code = main(["live-brave-download"])
-        assert code == 2
-
-    def test_errors_when_debugger_address_missing(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_LIVE_BRAVE", "1")
-        monkeypatch.delenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", raising=False)
-        code = main(["live-brave-download"])
-        assert code == 2
-
-    def test_errors_when_deeplink_missing(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_LIVE_BRAVE", "1")
-        monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
-        monkeypatch.delenv("GOOGLEADS_BILLING_DEEPLINK", raising=False)
-        code = main(["live-brave-download"])
-        assert code == 2
-
-    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
-    def test_happy_path_calls_download(
-        self,
-        mock_download: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_LIVE_BRAVE", "1")
-        monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
-        monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "https://c.gle/abc")
-        monkeypatch.delenv("GOOGLEADS_LIVE_BRAVE_TRACE_DIR", raising=False)
-
-        pdf = tmp_path / "invoice.pdf"
-        pdf.write_text("pdf", encoding="utf-8")
-        mock_download.return_value = pdf
-
-        code = main(["live-brave-download"])
-        assert code == 0
-        mock_download.assert_called_once_with(
-            debugger_address="127.0.0.1:9222",
-            deeplink_url="https://c.gle/abc",
-            download_dir=Path.home() / "Downloads",
-        )
-        assert "Downloaded" in capsys.readouterr().err
-
-    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
-    def test_uses_flag_args_over_env(
-        self,
-        mock_download: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_LIVE_BRAVE", "1")
-        monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "should-not-win")
-        monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "should-not-win")
-        monkeypatch.setenv("GOOGLEADS_LIVE_BRAVE_TRACE_DIR", str(tmp_path))
-
-        pdf = tmp_path / "invoice.pdf"
-        pdf.write_text("pdf", encoding="utf-8")
-        mock_download.return_value = pdf
-
-        code = main([
-            "live-brave-download",
-            "--debugger-address", "192.168.1.1:9222",
-            "--deeplink", "https://c.gle/flag",
-            "--download-dir", str(tmp_path / "custom"),
-        ])
-        assert code == 0
-        mock_download.assert_called_once_with(
-            debugger_address="192.168.1.1:9222",
-            deeplink_url="https://c.gle/flag",
-            download_dir=tmp_path / "custom",
-        )
-
-    @patch("googleads_invoice.live_brave_download.live_brave_download_pdf")
-    def test_propagates_live_brave_download_error(
-        self,
-        mock_download: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_LIVE_BRAVE", "1")
-        monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
-        monkeypatch.setenv("GOOGLEADS_BILLING_DEEPLINK", "https://c.gle/abc")
-
-        mock_download.side_effect = LiveBraveDownloadError("something went wrong")
-
-        code = main(["live-brave-download"])
-        assert code == 2

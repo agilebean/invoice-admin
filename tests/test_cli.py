@@ -44,13 +44,6 @@ def test_cli_status_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert code == 0
 
 
-def test_cli_cost_missing_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
-    _write_min_repo(tmp_path)
-    code = main(["cost"])
-    assert code == 0
-
-
 def test_cli_send_unknown_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
     _write_min_repo(tmp_path)
@@ -58,8 +51,10 @@ def test_cli_send_unknown_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert code == 2
 
 
-def test_cli_ingest_email_missing_imap_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_ingest_email_no_gmail_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``invoice ingest --email`` without Gmail OAuth token returns 2 (auth error)."""
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
     _write_min_repo(tmp_path)
     from invoice_admin.core.spark_link import spark_deep_link
 

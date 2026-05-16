@@ -11,11 +11,11 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from googleads_invoice.addresses import DROPBOX_INVOICE_DIR
-from googleads_invoice.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
-from googleads_invoice.gmail_api_backend import GmailApiReadBackend
-from googleads_invoice.gmail_facade import GmailTransportError
-from googleads_invoice.invoice_artifacts import _eur_commission_filename_amount
+from invoice_admin.googleads.addresses import DROPBOX_INVOICE_DIR
+from invoice_admin.googleads.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
+from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+from invoice_admin.googleads.gmail_facade import GmailTransportError
+from invoice_admin.googleads.invoice_artifacts import _eur_commission_filename_amount
 
 
 class SaveCommissionPdfError(RuntimeError):

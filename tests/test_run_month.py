@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
-from googleads_invoice.run_month import RunMonthError, run_month
+from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
+from invoice_admin.googleads.run_month import RunMonthError, run_month
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ def test_run_month_happy_path(
     pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
-        "googleads_invoice.live_brave_download.live_brave_download_pdf",
+        "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
         return_value=pdf_copy,
     ):
         report = run_month(
@@ -129,7 +129,7 @@ def test_run_month_uses_auto_month_label(
     pdf_copy.write_bytes(fixture_pdf.read_bytes())
 
     with patch(
-        "googleads_invoice.live_brave_download.live_brave_download_pdf",
+        "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
         return_value=pdf_copy,
     ):
         report = run_month(
@@ -223,7 +223,7 @@ def test_run_month_brave_download_fails(
 
     with (
         patch(
-            "googleads_invoice.live_brave_download.live_brave_download_pdf",
+            "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
             side_effect=RunMonthError("Brave navigation failed"),
         ),
         pytest.raises(RunMonthError, match="Brave navigation failed"),
@@ -260,7 +260,7 @@ def test_run_month_smtp_fails(
 
     with (
         patch(
-            "googleads_invoice.live_brave_download.live_brave_download_pdf",
+            "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
             return_value=pdf_copy,
         ),
         pytest.raises(RunMonthError, match="SMTP send failed"),
@@ -277,48 +277,48 @@ def test_run_month_smtp_fails(
         )
 
 
-# ── CLI: run-month subcommand ───────────────────────────────────────────
+# ── CLI: send subcommand ───────────────────────────────────────────
 
 
-class TestCliRunMonth:
+class TestCliSend:
     def test_refuses_without_confirm_env(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.delenv("GOOGLEADS_CONFIRM_RUN_MONTH", raising=False)
-        code = main(["run-month"])
+        code = main(["send"])
         assert code == 2
 
     def test_errors_when_debugger_address_missing(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
         monkeypatch.delenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", raising=False)
-        code = main(["run-month"])
+        code = main(["send"])
         assert code == 2
 
     def test_errors_when_smtp_password_missing(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
         monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
-        code = main(["run-month"])
+        code = main(["send"])
         assert code == 2
 
     @patch("builtins.input", return_value="y")
-    @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
-    @patch("googleads_invoice.run_month.run_month")
+    @patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env")
+    @patch("invoice_admin.googleads.run_month.run_month")
     def test_happy_path(
         self,
         mock_run_month: MagicMock,
@@ -327,8 +327,8 @@ class TestCliRunMonth:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        from googleads_invoice.cli import main
-        from googleads_invoice.run_month import RunMonthReport
+        from invoice_admin.googleads.cli import main
+        from invoice_admin.googleads.run_month import RunMonthReport
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
@@ -353,20 +353,20 @@ class TestCliRunMonth:
             send_status="smtp:pdf:ok",
         )
 
-        code = main(["run-month", "--test-run", "--to", "jack@example.com"])
+        code = main(["send"])
         assert code == 0
         mock_run_month.assert_called_once()
-        assert mock_run_month.call_args.kwargs["to_address"] == "jack@example.com"
+        assert mock_run_month.call_args.kwargs["to_address"] == "jack.copeland@theglugglejugfactory.com"
 
     @patch("builtins.input", return_value="y")
-    @patch("googleads_invoice.run_month.run_month")
+    @patch("invoice_admin.googleads.run_month.run_month")
     def test_propagates_run_month_error(
         self,
         mock_run_month: MagicMock,
         mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
+        from invoice_admin.googleads.cli import main
 
         monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
         monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
@@ -377,39 +377,34 @@ class TestCliRunMonth:
 
         mock_run_month.side_effect = RunMonthError("something broke")
 
-        code = main(["run-month"])
+        code = main(["send"])
         assert code == 2
 
     @patch("builtins.input", return_value="y")
-    @patch("googleads_invoice.cli.GmailApiReadBackend.from_env")
-    def test_uses_default_recipient_when_omitted(
+    @patch("invoice_admin.googleads.cli.GmailFacade.send_text_with_pdf_attachment")
+    def test_send_test_run_uses_default_recipient_when_omitted(
         self,
-        mock_from_env: MagicMock,
-        mock_input: MagicMock,
+        mock_send: MagicMock,
+        _mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from googleads_invoice.cli import main
-        from googleads_invoice.addresses import DEFAULT_TEST_RECIPIENT
+        from invoice_admin.googleads.cli import main
+        from invoice_admin.googleads.addresses import DEFAULT_TEST_RECIPIENT
 
-        monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-        monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
-        monkeypatch.setenv("GOOGLEADS_BROWSER_DEBUGGER_ADDRESS", "127.0.0.1:9222")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")
         monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
         monkeypatch.delenv("GOOGLEADS_INVOICE_TO", raising=False)
-        mock_from_env.return_value = MagicMock()
 
-        with patch("googleads_invoice.run_month.run_month") as mock_run:
-            code = main(["run-month", "--test-run"])
-            assert code == 0  # exits early via mock, but that's fine
-            assert mock_run.call_args.kwargs["to_address"] == DEFAULT_TEST_RECIPIENT
+        code = main(["send", "--test-run"])
+        assert code == 0
+        assert mock_send.call_args.kwargs["to"] == DEFAULT_TEST_RECIPIENT
 
 
-def test_cli_run_month_help_mentions_guard(capsys: pytest.CaptureFixture[str]) -> None:
-    from googleads_invoice.cli import main
+def test_cli_send_help_mentions_guard(capsys: pytest.CaptureFixture[str]) -> None:
+    from invoice_admin.googleads.cli import main
 
     with pytest.raises(SystemExit):
-        main(["run-month", "--help"])
+        main(["send", "--help"])
     out = capsys.readouterr().out
-    assert "run-month" in out or "GOOGLEADS_CONFIRM_RUN_MONTH" in out
+    assert "send" in out or "GOOGLEADS_CONFIRM_RUN_MONTH" in out

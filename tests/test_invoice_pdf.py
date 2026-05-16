@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from googleads_invoice.invoice_pdf import InvoicePdfError, parse_invoice_pdf
+from invoice_admin.googleads.invoice_pdf import InvoicePdfError, parse_invoice_pdf
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "pdf"
 

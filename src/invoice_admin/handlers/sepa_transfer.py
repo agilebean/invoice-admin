@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from invoice_admin.core.config import InvoiceConfig
-from invoice_admin.core.errors import HandlerError
+from invoice_admin.core.errors import HandlerError, tracker_error_blob
 from invoice_admin.core.notify import Notification, Notifier
 from invoice_admin.core.tracker import InvoiceRow, Tracker
 
@@ -41,10 +41,6 @@ def validate_iban(iban: str) -> bool:
         return int(digits) % 97 == 1
     except ValueError:
         return False
-
-
-def _error_blob(exc: BaseException) -> str:
-    return json.dumps({"type": type(exc).__name__, "message": str(exc)}, indent=2)
 
 
 def _append_jsonl_log(config: InvoiceConfig, record: dict[str, Any]) -> None:
@@ -183,7 +179,7 @@ class SepaTransferHandler:
             tracker.update_status(
                 row.id,
                 "failed",
-                error=_error_blob(HandlerError("Missing FINTS_PIN for live SEPA")),
+                error=tracker_error_blob(HandlerError("Missing FINTS_PIN for live SEPA")),
             )
             notifier.send(
                 Notification(
@@ -198,7 +194,7 @@ class SepaTransferHandler:
         try:
             txn_id = self._dispatch_fints(payload, pin)
         except Exception as e:
-            tracker.update_status(row.id, "failed", error=_error_blob(e))
+            tracker.update_status(row.id, "failed", error=tracker_error_blob(e))
             notifier.send(
                 Notification(
                     title="SEPA failed",

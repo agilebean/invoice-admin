@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from googleads_invoice.billing_url import extract_billing_url
-from googleads_invoice.gmail_api_backend import (
+from invoice_admin.googleads.billing_url import extract_billing_url
+from invoice_admin.googleads.gmail_api_backend import (
     DEFAULT_BILLING_MAIL_QUERY,
     DEFAULT_COMMISSION_MAIL_QUERY,
     GmailApiReadBackend,
@@ -17,7 +17,7 @@ from googleads_invoice.gmail_api_backend import (
     commission_mail_query_from_env,
     html_from_gmail_message_payload,
 )
-from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
+from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
 
 
 def test_billing_mail_query_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,7 +46,7 @@ def test_from_token_path_rejects_missing_file(tmp_path: Path) -> None:
         GmailApiReadBackend.from_token_path(p)
 
 
-@patch("googleads_invoice.gmail_api_backend.Credentials.from_authorized_user_file")
+@patch("invoice_admin.googleads.gmail_api_backend.Credentials.from_authorized_user_file")
 def test_from_token_path_wraps_refresh_failure(
     mock_from_file: MagicMock, tmp_path: Path
 ) -> None:
@@ -81,7 +81,7 @@ def test_html_from_gmail_payload_multipart_alternative() -> None:
     assert extract_billing_url(raw) == "https://payments.google.com/inv"
 
 
-@patch("googleads_invoice.gmail_api_backend.build")
+@patch("invoice_admin.googleads.gmail_api_backend.build")
 def test_get_message_html_uses_full_format(mock_build: MagicMock) -> None:
     html = '<a href="https://pay.google.com/x">y</a>'
     b64 = base64.urlsafe_b64encode(html.encode()).decode().rstrip("=")
@@ -102,7 +102,7 @@ def test_get_message_html_uses_full_format(mock_build: MagicMock) -> None:
     )
 
 
-@patch("googleads_invoice.gmail_api_backend.build")
+@patch("invoice_admin.googleads.gmail_api_backend.build")
 def test_list_messages_maps_api_response(mock_build: MagicMock) -> None:
     mock_service = MagicMock()
     mock_build.return_value = mock_service
@@ -129,7 +129,7 @@ def test_list_messages_maps_api_response(mock_build: MagicMock) -> None:
     list_call.assert_called_once_with(userId="me", q="from:test", maxResults=5)
 
 
-@patch("googleads_invoice.gmail_api_backend.build")
+@patch("invoice_admin.googleads.gmail_api_backend.build")
 def test_list_messages_empty_inbox(mock_build: MagicMock) -> None:
     mock_service = MagicMock()
     mock_build.return_value = mock_service

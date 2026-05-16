@@ -50,10 +50,15 @@ class Notifier:
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                raw_code = getattr(resp, "status", None)
+                raw_code: object | None = getattr(resp, "status", None)
                 if raw_code is None and hasattr(resp, "getcode"):
                     raw_code = resp.getcode()
-                return 200 <= int(raw_code) < 300
+                if raw_code is None:
+                    return False
+                if not isinstance(raw_code, (int, float)):
+                    return False
+                code_n = int(raw_code)
+                return 200 <= code_n < 300
         except urllib.error.HTTPError as e:
             logger.warning("ntfy HTTP error %s: %s", e.code, e.reason)
             return False

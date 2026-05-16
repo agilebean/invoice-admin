@@ -33,7 +33,7 @@ def test_send_monthly_invoice_passes_dropbox_from_yaml(monkeypatch) -> None:
         return object()
 
     monkeypatch.setattr(
-        "googleads_invoice.run_month.run_month",
+        "invoice_admin.googleads.run_month.run_month",
         fake_run_month,
     )
     h = OutgoingInvoiceHandler(cfg)

@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from googleads_invoice.gmail_facade import GmailTransportError
-from googleads_invoice.gmail_smtp import SmtpGmailBackend
+from invoice_admin.googleads.gmail_facade import GmailTransportError
+from invoice_admin.googleads.gmail_smtp import SmtpGmailBackend
 
 
-@patch("googleads_invoice.gmail_smtp.smtplib.SMTP")
+@patch("invoice_admin.googleads.gmail_smtp.smtplib.SMTP")
 def test_smtp_send_text_with_pdf_attachment(
     mock_smtp_class: MagicMock,
     tmp_path: Path,

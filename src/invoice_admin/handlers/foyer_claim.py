@@ -1,7 +1,6 @@
 """Foyer Global Health claim submission via Playwright."""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -12,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from invoice_admin.core.config import InvoiceConfig
-from invoice_admin.core.errors import FoyerAuthError, HandlerError
+from invoice_admin.core.errors import FoyerAuthError, HandlerError, tracker_error_blob
 from invoice_admin.core.notify import Notification, Notifier
 from invoice_admin.core.tracker import InvoiceRow, Tracker
 from invoice_admin.handlers.base import prepare_invoice_pdf
@@ -26,13 +25,6 @@ def _default_playwright_factory() -> Any:
     from playwright.sync_api import sync_playwright
 
     return sync_playwright()
-
-
-def _error_blob(exc: BaseException) -> str:
-    return json.dumps(
-        {"type": type(exc).__name__, "message": str(exc)},
-        indent=2,
-    )
 
 
 class FoyerClaimHandler:
@@ -77,7 +69,7 @@ class FoyerClaimHandler:
         try:
             self._submit_with_playwright(row, tracker, notifier, pdf_path)
         except FoyerAuthError as e:
-            tracker.update_status(row.id, "failed", error=_error_blob(e))
+            tracker.update_status(row.id, "failed", error=tracker_error_blob(e))
             notifier.send(
                 Notification(
                     title="Foyer claim failed (auth)",
@@ -88,7 +80,7 @@ class FoyerClaimHandler:
             )
             raise
         except Exception as e:
-            tracker.update_status(row.id, "failed", error=_error_blob(e))
+            tracker.update_status(row.id, "failed", error=tracker_error_blob(e))
             notifier.send(
                 Notification(
                     title="Foyer claim failed",

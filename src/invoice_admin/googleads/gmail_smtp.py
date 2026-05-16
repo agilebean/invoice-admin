@@ -6,7 +6,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
-from googleads_invoice.gmail_facade import GmailMessageSummary, GmailTransportError
+from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
 
 
 class SmtpGmailBackend:

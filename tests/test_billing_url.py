@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from googleads_invoice.billing_url import BillingUrlNotFoundError, extract_billing_url
+from invoice_admin.googleads.billing_url import BillingUrlNotFoundError, extract_billing_url
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "gmail"
 

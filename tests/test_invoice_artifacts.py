@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from googleads_invoice.invoice_artifacts import (
+from invoice_admin.googleads.invoice_artifacts import (
     InvoiceOutputFields,
     build_email_body,
     build_email_subject,

@@ -164,6 +164,8 @@ See **`docs/BACKWARD_PLAN_AND_INTERVIEW.md`** for the full interview and recorde
 
 ## Post-plan backlog (after `docs/IMPLEMENTATION_PLAN_invoice_handler.md` is done)
 
+**Ordered coding slices (smallest → largest):** see **`docs/IMPLEMENTATION_PLAN_invoice_handler.md` §5.1** (`S1` … `S7`). Use that table for agent “continue” work after the §5 checklist is green; **P1** remains the terminal slice below.
+
 | ID | Task | Why | Rough scope |
 |----|------|-----|---------------|
 | **P1** | **Fold `googleads_invoice` into `invoice_admin`** (e.g. `invoice_admin/integrations/googleads/` or similar), then drop the standalone **`googleads_invoice`** package from the wheel if desired | One **`src/`** tree and one primary namespace matches how you think about the product | **Large:** move ~20 modules, switch `from googleads_invoice…` → `from invoice_admin…` (or keep a thin **`googleads_invoice`** shim package that re-exports), update every test **`@patch`** path, re-run full parity + **`run-month`** / **`dry-run`** checks; optional follow-up: single CLI only (`invoice …`) with `googleads-invoice` as a thin alias |

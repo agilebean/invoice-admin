@@ -12,24 +12,24 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from googleads_invoice.billing_period import (
+from invoice_admin.googleads.billing_period import (
     billing_month_label_for_previous_calendar_month,
 )
-from googleads_invoice.billing_url import (
+from invoice_admin.googleads.billing_url import (
     BillingUrlNotFoundError,
     extract_billing_url,
 )
-from googleads_invoice.gmail_api_backend import GmailApiReadBackend
-from googleads_invoice.gmail_facade import GmailTransportError
-from googleads_invoice.gmail_smtp import SmtpGmailBackend
-from googleads_invoice.invoice_artifacts import (
+from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+from invoice_admin.googleads.gmail_facade import GmailTransportError
+from invoice_admin.googleads.gmail_smtp import SmtpGmailBackend
+from invoice_admin.googleads.invoice_artifacts import (
     InvoiceOutputFields,
     build_email_body,
     build_email_subject,
     build_renamed_pdf_filename,
 )
-from googleads_invoice.invoice_pdf import InvoicePdfError, parse_invoice_pdf
-from googleads_invoice.addresses import (
+from invoice_admin.googleads.invoice_pdf import InvoicePdfError, parse_invoice_pdf
+from invoice_admin.googleads.addresses import (
     CC_RECIPIENTS,
     BCC_RECIPIENTS,
     DROPBOX_INVOICE_DIR,
@@ -125,12 +125,14 @@ def run_month(
         )
 
     # 2. Brave download → PDF
-    from googleads_invoice.live_brave_download import (
+    from invoice_admin.googleads.browser_download import ensure_brave_running
+    from invoice_admin.googleads.live_brave_download import (
         LiveBraveDownloadError,
         live_brave_download_pdf,
     )
 
     _step(3, "Launching Brave to download invoice PDF...")
+    ensure_brave_running(debugger_address)
     try:
         pdf_path = live_brave_download_pdf(
             debugger_address=debugger_address,

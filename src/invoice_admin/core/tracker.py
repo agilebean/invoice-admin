@@ -189,7 +189,10 @@ class Tracker:
             if "UNIQUE constraint failed" in str(e) and "source_ref" in str(e):
                 raise IdempotencyViolation(source_ref) from e
             raise TrackerError(str(e)) from e
-        return int(cur.lastrowid)
+        rid = cur.lastrowid
+        if rid is None:
+            raise TrackerError("INSERT did not yield a row id")
+        return int(rid)
 
     def get(self, row_id: int) -> InvoiceRow | None:
         """Fetch one row by id."""

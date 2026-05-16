@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from email.header import decode_header, make_header
+from email.utils import parsedate_to_datetime
 from typing import Iterator
 
 
@@ -106,7 +107,7 @@ class ImapCollector:
                 subject = _decode_header_value(msg.get("Subject", "") or "")
                 date_hdr = msg.get("Date", "") or ""
                 try:
-                    date = email.utils.parsedate_to_datetime(date_hdr)
+                    date = parsedate_to_datetime(date_hdr)
                     if date.tzinfo is None:
                         date = date.replace(tzinfo=datetime.now().astimezone().tzinfo)
                 except (TypeError, ValueError, OverflowError):
@@ -133,7 +134,7 @@ def _parse_rfc822_to_email_message(raw_bytes: bytes) -> EmailMessage | None:
     subject = _decode_header_value(msg.get("Subject", "") or "")
     date_hdr = msg.get("Date", "") or ""
     try:
-        date = email.utils.parsedate_to_datetime(date_hdr)
+        date = parsedate_to_datetime(date_hdr)
         if date.tzinfo is None:
             date = date.replace(tzinfo=datetime.now().astimezone().tzinfo)
     except (TypeError, ValueError, OverflowError):

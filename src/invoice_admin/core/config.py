@@ -157,10 +157,10 @@ def load_config(root: Path | None = None) -> InvoiceConfig:
     if not isinstance(models_block, dict):
         raise ConfigError("models must be a mapping in default.yaml")
     models_cfg = ModelConfig(
-        fast=str(models_block.get("fast", "claude-haiku-4-5")),
-        smart=str(models_block.get("smart", "claude-opus-4-7")),
-        cheap=str(models_block.get("cheap", "deepseek/deepseek-chat")),
-        local=str(models_block.get("local", "ollama/llama3.1:70b")),
+        fast=str(models_block.get("fast", "openai/deepseek/deepseek-v4-flash")),
+        smart=str(models_block.get("smart", "openai/deepseek/deepseek-v4-pro")),
+        cheap=str(models_block.get("cheap", "openai/minimax-m2.5")),
+        local=str(models_block.get("local", "openai/local-model")),
     )
 
     notify_block = cfg.get("notify") or {}

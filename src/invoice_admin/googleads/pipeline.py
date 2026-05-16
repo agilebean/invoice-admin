@@ -7,18 +7,18 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from googleads_invoice.billing_url import extract_billing_url
-from googleads_invoice.addresses import (
+from invoice_admin.googleads.billing_url import extract_billing_url
+from invoice_admin.googleads.addresses import (
     DEFAULT_GMAIL_SENDER,
     PRODUCTION_RECIPIENT_JACK,
 )
-from googleads_invoice.invoice_artifacts import (
+from invoice_admin.googleads.invoice_artifacts import (
     InvoiceOutputFields,
     build_email_body,
     build_email_subject,
     build_renamed_pdf_filename,
 )
-from googleads_invoice.invoice_pdf import parse_invoice_pdf
+from invoice_admin.googleads.invoice_pdf import parse_invoice_pdf
 
 
 @dataclass(frozen=True)

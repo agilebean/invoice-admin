@@ -39,11 +39,7 @@ export GOOGLEADS_BROWSER_DEBUGGER_ADDRESS="127.0.0.1:9222"
 
 echo "Running run-month..." >> "$LOG_DIR/monthly.log"
 cd "$HOME/Software/Prototypes/invoice-admin"
-if command -v googleads-invoice >/dev/null 2>&1; then
-  googleads-invoice run-month >> "$LOG_DIR/monthly.log" 2>&1
-else
-  python -m googleads_invoice run-month >> "$LOG_DIR/monthly.log" 2>&1
-fi
+invoice googleads run-month >> "$LOG_DIR/monthly.log" 2>&1
 
 echo "Done. Stopping Brave..." >> "$LOG_DIR/monthly.log"
 kill "$BRAVE_PID" 2>/dev/null || true

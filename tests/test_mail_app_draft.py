@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from googleads_invoice.mail_app_draft import (
+from invoice_admin.googleads.mail_app_draft import (
     MailAppDraftError,
     _applescript_string_expr,
     build_open_draft_applescript,
@@ -47,7 +47,7 @@ def test_open_mail_app_draft_non_macos() -> None:
             )
 
 
-@patch("googleads_invoice.mail_app_draft.subprocess.run")
+@patch("invoice_admin.googleads.mail_app_draft.subprocess.run")
 @patch.object(sys, "platform", "darwin")
 def test_open_mail_app_draft_runs_osascript(
     mock_run: MagicMock, tmp_path: Path

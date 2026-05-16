@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from googleads_invoice.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
+from invoice_admin.googleads.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
 
 
 def test_parse_commission_pdf_amount_fixture_matches_last_euro() -> None:

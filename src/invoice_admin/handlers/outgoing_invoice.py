@@ -43,8 +43,8 @@ class OutgoingInvoiceHandler:
         month_label: str | None = None,
     ) -> Any:
         """Same contract as ``googleads_invoice.pipeline.run_dry_run`` (fixture-driven)."""
-        from googleads_invoice.billing_period import billing_month_label_for_previous_calendar_month
-        from googleads_invoice.pipeline import run_dry_run
+        from invoice_admin.googleads.billing_period import billing_month_label_for_previous_calendar_month
+        from invoice_admin.googleads.pipeline import run_dry_run
 
         label = month_label or billing_month_label_for_previous_calendar_month()
         return run_dry_run(
@@ -67,7 +67,7 @@ class OutgoingInvoiceHandler:
         max_scan: int = 5,
     ) -> Any:
         """Run Gmail → Brave → parse → SMTP → Dropbox using YAML wiring."""
-        from googleads_invoice.run_month import run_month
+        from invoice_admin.googleads.run_month import run_month
 
         billing = self._cfg["billing"]
         email = self._cfg["email"]
@@ -108,7 +108,7 @@ class OutgoingInvoiceHandler:
         max_scan: int = 10,
     ) -> Any:
         """Search commission mail, stage PDF, parse, move to Dropbox (YAML paths)."""
-        from googleads_invoice.save_commission_pdf import save_commission_pdf as _save_commission
+        from invoice_admin.googleads.save_commission_pdf import save_commission_pdf as _save_commission
 
         commission = self._cfg["commission"]
         paths = self._cfg["paths"]

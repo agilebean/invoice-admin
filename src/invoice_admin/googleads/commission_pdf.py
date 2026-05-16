@@ -10,7 +10,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-from googleads_invoice.invoice_pdf import _parse_money_token
+from invoice_admin.googleads.invoice_pdf import _parse_money_token
 
 
 class CommissionPdfError(ValueError):
