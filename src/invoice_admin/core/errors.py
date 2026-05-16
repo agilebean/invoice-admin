@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 
+from agentkit.core import AgentError
 
-class InvoiceError(Exception):
+
+class InvoiceError(AgentError):
     """Base exception for all invoice-admin errors."""
 
 

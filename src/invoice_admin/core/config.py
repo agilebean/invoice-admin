@@ -62,25 +62,10 @@ class InvoiceConfig:
 
 
 def repo_root() -> Path:
-    """Find repository root. Mirrors swim/common.py:repo_root()."""
-    env = os.environ.get("INVOICE_ADMIN_REPO_ROOT")
-    if env:
-        return Path(env).resolve()
-
-    cwd = Path.cwd().resolve()
-    for parent in [cwd, *cwd.parents]:
-        if (parent / "pyproject.toml").is_file():
-            return parent
-
-    here = Path(__file__).resolve().parent
-    for parent in [here, *here.parents]:
-        if (parent / "pyproject.toml").is_file():
-            return parent
-
-    raise RuntimeError(
-        "Cannot find repo root: no pyproject.toml found. "
-        "Set INVOICE_ADMIN_REPO_ROOT env var or run from within the repo."
-    )
+    """Find repository root. Delegates to agentkit.core.repo_root with
+    INVOICE_ADMIN_REPO_ROOT env var for backward compatibility."""
+    from agentkit.core import repo_root as _repo_root
+    return _repo_root(env_var="INVOICE_ADMIN_REPO_ROOT")
 
 
 def _expand_path(value: str | Path | None, default: Path) -> Path:
