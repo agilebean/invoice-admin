@@ -1,7 +1,15 @@
 import os
 import sys
+from unittest.mock import patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _mock_brave_global() -> None:
+    """Mock ensure_brave_running for all tests — macOS-only function."""
+    with patch("invoice_admin.googleads.browser_download.ensure_brave_running"):
+        yield
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

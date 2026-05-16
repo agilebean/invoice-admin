@@ -12,6 +12,7 @@ import pytest
 from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
 from invoice_admin.googleads.run_month import RunMonthError, run_month
 
+_BRAVE_PATCH = patch("invoice_admin.googleads.browser_download.ensure_brave_running")
 
 # ── Fixtures ────────────────────────────────────────────────────────────
 
@@ -65,7 +66,9 @@ def invoice_pdf(tmp_path: Path) -> Path:
 # ── run_month: happy path ────────────────────────────────────────────────
 
 
+@_BRAVE_PATCH
 def test_run_month_happy_path(
+    _mock_brave: MagicMock,
     mock_gmail_backend: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
@@ -110,7 +113,9 @@ def test_run_month_happy_path(
     assert len(report.steps) >= 5  # search, brave, parse, artifacts, send
 
 
+@_BRAVE_PATCH
 def test_run_month_uses_auto_month_label(
+    _mock_brave: MagicMock,
     mock_gmail_backend: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
@@ -150,7 +155,9 @@ def test_run_month_uses_auto_month_label(
 # ── run_month: error paths ──────────────────────────────────────────────
 
 
+@_BRAVE_PATCH
 def test_run_month_gmail_search_fails(
+    _mock_brave: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
 ) -> None:
@@ -170,7 +177,9 @@ def test_run_month_gmail_search_fails(
         )
 
 
+@_BRAVE_PATCH
 def test_run_month_no_gmail_results(
+    _mock_brave: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
 ) -> None:
@@ -190,7 +199,9 @@ def test_run_month_no_gmail_results(
         )
 
 
+@_BRAVE_PATCH
 def test_run_month_no_billing_url_in_messages(
+    _mock_brave: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
 ) -> None:
@@ -213,7 +224,9 @@ def test_run_month_no_billing_url_in_messages(
         )
 
 
+@_BRAVE_PATCH
 def test_run_month_brave_download_fails(
+    _mock_brave: MagicMock,
     mock_gmail_backend: MagicMock,
     mock_smtp_backend: MagicMock,
     tmp_path: Path,
@@ -240,7 +253,9 @@ def test_run_month_brave_download_fails(
         )
 
 
+@_BRAVE_PATCH
 def test_run_month_smtp_fails(
+    _mock_brave: MagicMock,
     mock_gmail_backend: MagicMock,
     tmp_path: Path,
 ) -> None:
@@ -317,12 +332,14 @@ class TestCliSend:
         assert code == 2
 
     @patch("builtins.input", return_value="y")
+    @patch("invoice_admin.googleads.browser_download.ensure_brave_running")
     @patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env")
     @patch("invoice_admin.googleads.run_month.run_month")
     def test_happy_path(
         self,
         mock_run_month: MagicMock,
         mock_from_env: MagicMock,
+        mock_brave: MagicMock,
         mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -359,10 +376,12 @@ class TestCliSend:
         assert mock_run_month.call_args.kwargs["to_address"] == "jack.copeland@theglugglejugfactory.com"
 
     @patch("builtins.input", return_value="y")
+    @patch("invoice_admin.googleads.browser_download.ensure_brave_running")
     @patch("invoice_admin.googleads.run_month.run_month")
     def test_propagates_run_month_error(
         self,
         mock_run_month: MagicMock,
+        mock_brave: MagicMock,
         mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -381,15 +400,22 @@ class TestCliSend:
         assert code == 2
 
     @patch("builtins.input", return_value="y")
+    @patch("invoice_admin.googleads.cli._subject_body_attachment_for_pdf")
     @patch("invoice_admin.googleads.cli.GmailFacade.send_text_with_pdf_attachment")
     def test_send_test_run_uses_default_recipient_when_omitted(
         self,
         mock_send: MagicMock,
+        mock_subject_body: MagicMock,
         _mock_input: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
         from invoice_admin.googleads.cli import main
         from invoice_admin.googleads.addresses import DEFAULT_TEST_RECIPIENT
+
+        pdf = tmp_path / "invoice.pdf"
+        pdf.touch()
+        mock_subject_body.return_value = ("subject", "body", "attach.pdf", pdf)
 
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_USER", "me@gmail.com")
         monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "x")

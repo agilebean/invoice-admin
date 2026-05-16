@@ -23,8 +23,8 @@ class ExtractedInvoiceData:
     iban: str | None
     bic: str | None
     verwendungszweck: str | None
-    document_topic: str | None
-    raw_json: str
+    document_topic: str | None = None
+    raw_json: str = ""
 
 
 def _str_field(value: Any) -> str | None:

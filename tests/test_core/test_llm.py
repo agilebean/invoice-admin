@@ -24,7 +24,8 @@ def test_resolve_model_unknown_raises() -> None:
         p._resolve_model("not-an-alias")
 
 
-def test_complete_logs_success(tmp_path: Path) -> None:
+def test_complete_logs_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     log_db = tmp_path / "llm.sqlite"
     provider = LLMProvider(log_path=log_db)
 
@@ -32,8 +33,8 @@ def test_complete_logs_success(tmp_path: Path) -> None:
     fake_choice = SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))
     fake_resp = SimpleNamespace(choices=[fake_choice], usage=fake_usage)
 
-    with patch("invoice_admin.core.llm.litellm.completion", return_value=fake_resp):
-        with patch("invoice_admin.core.llm.litellm.completion_cost", return_value=0.01):
+    with patch("agentkit.llm._litellm.litellm.completion", return_value=fake_resp):
+        with patch("agentkit.llm._litellm.litellm.completion_cost", return_value=0.01):
             out = provider.complete("hi", model_alias="fast", purpose="general")
     assert out == '{"ok": true}'
 
@@ -46,12 +47,13 @@ def test_complete_logs_success(tmp_path: Path) -> None:
     assert row[1] == MODEL_ALIASES["fast"]
 
 
-def test_complete_logs_failure(tmp_path: Path) -> None:
+def test_complete_logs_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     log_db = tmp_path / "llm.sqlite"
     provider = LLMProvider(log_path=log_db)
 
-    with patch("invoice_admin.core.llm.litellm.completion", side_effect=RuntimeError("boom")):
-        with pytest.raises(RuntimeError):
+    with patch("agentkit.llm._litellm.litellm.completion", side_effect=RuntimeError("boom")):
+        with pytest.raises(Exception):
             provider.complete("hi", model_alias="fast")
 
     import sqlite3

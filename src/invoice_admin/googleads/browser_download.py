@@ -17,6 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 _BRAVE_PATH_MACOS = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+_IS_MACOS = sys.platform == "darwin"
 
 
 def _brave_cdp_ready(address: str, timeout_s: float = 2.0) -> bool:
@@ -44,8 +45,8 @@ def ensure_brave_running(
 
     binary = _BRAVE_PATH_MACOS
     if not Path(binary).exists():
-        # Not on macOS or Brave not in standard location — trust the caller
-        # to have the browser running already.
+        if not _IS_MACOS:
+            return
         raise RuntimeError(
             f"Brave not found at {binary!r} and is not listening on {address}. "
             "Start Brave manually with --remote-debugging-port first."

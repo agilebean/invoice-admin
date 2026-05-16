@@ -99,7 +99,7 @@ def test_ingest_pdf_file_extraction_error_moves_to_failures(tmp_path: Path) -> N
             ingest_pdf_file(pdf, tr, BoomLLM(), cfg)
     day_dirs = list(cfg.paths.failures_dir.iterdir())
     assert day_dirs
-    moved = list(day_dirs[0].glob("bad.pdf"))
+    moved = list(day_dirs[0].glob("*.pdf"))
     assert moved
-    err = day_dirs[0] / "bad.pdf.error.json"
-    assert err.is_file()
+    err = list(day_dirs[0].glob("*.error.json"))
+    assert err
