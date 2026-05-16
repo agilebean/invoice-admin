@@ -1,103 +1,31 @@
-"""LLM provider abstraction via litellm.
-
-Model aliases and per‑provider routing mirror the ``email-digest`` neighbour repo.
-"""
-
+"""LLM provider abstraction — delegates to agentkit.llm, keeps per-project logging."""
 from __future__ import annotations
 
-import base64
-import json
 import os
 import sqlite3
 import time
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import litellm
+from agentkit.llm import (
+    DEFAULT_MODEL_ALIASES,
+    complete as _agentkit_complete,
+    response_cost_usd,
+    resolve_model,
+)
 
 from invoice_admin.core.errors import ExtractionError
 
-# ---------------------------------------------------------------------------
-# Model aliases (defaults — overridable via config/default.yaml models: block)
-# ---------------------------------------------------------------------------
+MODEL_ALIASES: dict[str, str] = dict(DEFAULT_MODEL_ALIASES)
 
-MODEL_ALIASES: dict[str, str] = {
-    "fast": "openai/deepseek-v4-flash",
-    "smart": "openai/deepseek-v4-pro",
-    "cheap": "openai/minimax-m2.5",
-    # LM Studio — resolved via env var (default: Qwen3.5 4B MLX)
-    "local": "openai/local-model",
-}
-
-# LM Studio defaults (mirrors email-digest + local-chat)
 _LM_STUDIO_BASE_URL = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
-_LOCAL_MODEL_DEFAULT = "mlx-community/Qwen3.5-4B-MLX-4bit"
 
-# Every call routes through the OpenCode Go API (OpenAI-compatible endpoint).
-# All models use ``openai/`` prefix so litellm sends requests to ``api_base``
-# instead of the provider's default endpoint.
-_OPICODE_API_BASE = os.environ.get(
-    "OPENCODE_API_BASE", "https://opencode.ai/zen/go/v1"
-)
-
-
-# ---------------------------------------------------------------------------
-# Auth helpers (mirror email-digest)
-# ---------------------------------------------------------------------------
-
-_OPENCODE_AUTH_PATH = Path.home() / ".local" / "share" / "opencode" / "auth.json"
-
-
-def _read_opencode_auth() -> dict[str, dict[str, str]]:
-    if not _OPENCODE_AUTH_PATH.is_file():
-        return {}
-    try:
-        return json.loads(_OPENCODE_AUTH_PATH.read_text())  # type: ignore[no-any-return]
-    except Exception:
-        return {}
-
-
-def _opencode_auth_key(
-    *block_candidates: str, field_candidates: tuple[str, ...] = ("key", "apiKey")
-) -> str:
-    data = _read_opencode_auth()
-    for block in block_candidates:
-        entry = data.get(block)
-        if isinstance(entry, dict):
-            for f in field_candidates:
-                v = entry.get(f)
-                if isinstance(v, str) and v.strip():
-                    return v.strip()
-    return ""
-
-
-def _resolve_model_name(alias_map: dict[str, str], alias: str) -> str:
-    """Resolve *alias* through the alias map, respecting env-overrides."""
-    if alias == "local":
-        return os.environ.get("LM_STUDIO_MODEL", _LOCAL_MODEL_DEFAULT)
-    if alias == "cheap":
-        env_override = os.environ.get("CHEAP_MODEL", "").strip()
-        if env_override:
-            return env_override
-    if alias in alias_map:
-        return alias_map[alias]
-    # Pass-through for fully-qualified litellm model strings
-    if "/" in alias:
-        return alias
-    raise ValueError(f"Unknown model alias: {alias!r}")
-
-
-# ---------------------------------------------------------------------------
-# Call record + log schema (unchanged)
-# ---------------------------------------------------------------------------
 
 @dataclass
 class LLMCallRecord:
-    """Logged to llm_calls.sqlite."""
-
     model: str
     prompt_tokens: int
     completion_tokens: int
@@ -126,10 +54,6 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 """
 
 
-# ---------------------------------------------------------------------------
-# LLMProvider
-# ---------------------------------------------------------------------------
-
 class LLMProvider:
     """Single entry point for all LLM calls. Logs every call."""
 
@@ -141,8 +65,6 @@ class LLMProvider:
         self._aliases = dict(alias_map or MODEL_ALIASES)
         self._log_path = log_path
         self._log_conn: sqlite3.Connection | None = None
-
-    # -- log helpers ---------------------------------------------------------
 
     def _init_log(self) -> None:
         if self._log_path is None:
@@ -165,46 +87,22 @@ class LLMProvider:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                record.model,
-                record.prompt_tokens,
-                record.completion_tokens,
-                record.cost_usd,
-                record.duration_ms,
-                record.handler,
-                record.purpose,
-                1 if record.success else 0,
-                record.error,
-                created,
+                record.model, record.prompt_tokens, record.completion_tokens,
+                record.cost_usd, record.duration_ms,
+                record.handler, record.purpose,
+                1 if record.success else 0, record.error, created,
             ),
         )
         self._log_conn.commit()
 
-    # -- alias resolution ---------------------------------------------------
-
-    def _resolve_model(self, alias: str) -> str:  # kept for backward compat
-        return _resolve_model_name(self._aliases, alias)
-
-    # -- per‑alias completion kwargs ----------------------------------------
-
-    @staticmethod
-    def _complete_kwargs(model: str, alias: str) -> dict[str, Any]:
-        """Return ``api_base`` / ``api_key`` extras for *alias*."""
-        # LM Studio (local)
+    def _resolve_model(self, alias: str) -> str:
         if alias == "local":
-            return {
-                "api_base": _LM_STUDIO_BASE_URL,
-                "api_key": os.environ.get("LM_STUDIO_API_KEY", "lm-studio"),
-            }
-        # OpenCode Go API (everything else)
-        key = os.environ.get("OPENCODE_API_KEY", "").strip() or _opencode_auth_key(
-            "opencode-go", "opencode", "zen", "opencode-zen"
-        )
-        return {
-            "api_base": _OPICODE_API_BASE,
-            "api_key": key,
-        }
-
-    # -- public API ---------------------------------------------------------
+            return os.environ.get("LM_STUDIO_MODEL", _LM_STUDIO_BASE_URL.split("//")[1] or "local-model")
+        if alias in self._aliases:
+            return self._aliases[alias]
+        if "/" in alias:
+            return alias
+        raise ValueError(f"Unknown model alias: {alias!r}")
 
     def complete(
         self,
@@ -216,41 +114,100 @@ class LLMProvider:
         handler: str = "unknown",
         purpose: str = "general",
     ) -> str:
-        """Call LLM, log, return completion text. Raises litellm exceptions on failure."""
         self._init_log()
         t0 = time.perf_counter()
         err: str | None = None
-        success = False
         text = ""
-        pt, ct = 0, 0
-        cost = 0.0
-        model: str = model_alias
-        alias: str = model_alias  # track the original alias for routing
+        model = model_alias
+        record_data: dict[str, Any] = {}
+
+        def _log_fn(log_rec: dict[str, Any]) -> None:
+            nonlocal record_data
+            record_data = log_rec
+
         try:
-            model = _resolve_model_name(self._aliases, model_alias)
             messages: list[dict[str, Any]] = []
             if system:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                **LLMProvider._complete_kwargs(model, model_alias),
-            }
-            resp = litellm.completion(**kwargs)
+            text = _agentkit_complete(
+                messages,
+                alias=model_alias,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                aliases=self._aliases,
+                log_fn=_log_fn,
+            )
+            model = record_data.get("model", model_alias)
+            return text
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            raise
+        finally:
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            self._log_call(
+                LLMCallRecord(
+                    model=model,
+                    prompt_tokens=record_data.get("input_tokens", 0),
+                    completion_tokens=record_data.get("output_tokens", 0),
+                    cost_usd=record_data.get("cost_usd", 0.0),
+                    duration_ms=duration_ms,
+                    handler=handler,
+                    purpose=purpose,
+                    success=err is None,
+                    error=err,
+                )
+            )
+
+    def complete_with_pdf(
+        self,
+        prompt: str,
+        pdf_bytes: bytes,
+        model_alias: str = "fast",
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        handler: str = "unknown",
+        purpose: str = "general",
+    ) -> str:
+        import base64
+        import litellm
+
+        self._init_log()
+        t0 = time.perf_counter()
+        err: str | None = None
+        text = ""
+        model = model_alias
+        pt, ct = 0, 0
+        cost = 0.0
+
+        try:
+            model = resolve_model(model_alias, aliases=self._aliases)
+            b64 = base64.b64encode(pdf_bytes).decode("ascii")
+            messages: list[dict[str, Any]] = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:application/pdf;base64,{b64}"},
+                        },
+                    ],
+                }
+            ]
+            resp = litellm.completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             choice = resp.choices[0]
             text = str(choice.message.content or "")
             usage = getattr(resp, "usage", None)
             if usage is not None:
                 pt = int(getattr(usage, "prompt_tokens", 0) or 0)
                 ct = int(getattr(usage, "completion_tokens", 0) or 0)
-            try:
-                cost = float(litellm.completion_cost(completion_response=resp))
-            except Exception:
-                cost = 0.0
-            success = True
+            cost = response_cost_usd(resp)
             return text
         except Exception as e:
             err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
@@ -266,184 +223,16 @@ class LLMProvider:
                     duration_ms=duration_ms,
                     handler=handler,
                     purpose=purpose,
-                    success=success,
+                    success=err is None,
                     error=err,
                 )
             )
 
-    def complete_with_pdf(
-        self,
-        prompt: str,
-        pdf_bytes: bytes,
-        model_alias: str = "smart",
-        system: str | None = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        handler: str = "unknown",
-        purpose: str = "pdf_extraction",
-    ) -> str:
-        """Multimodal completion with a PDF document.
-
-        Tries Anthropic-style document parts first; falls back to
-        extracting images and sending as base64 image_url parts for
-        OpenAI-compatible endpoints (e.g. DeepSeek via OpenCode Go).
-        """
-        self._init_log()
-        t0 = time.perf_counter()
-        err: str | None = None
-        success = False
-        text = ""
-        pt, ct = 0, 0
-        cost = 0.0
-        model: str = model_alias
-        try:
-            model = _resolve_model_name(self._aliases, model_alias)
-            messages: list[dict[str, Any]] = []
-            if system:
-                messages.append({"role": "system", "content": system})
-
-            # Try Anthropic-style document part first
-            b64 = base64.standard_b64encode(pdf_bytes).decode("ascii")
-            user_content: list[dict[str, Any]] = [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": b64,
-                    },
-                },
-            ]
-            messages.append({"role": "user", "content": user_content})
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                **LLMProvider._complete_kwargs(model, model_alias),
-            }
-            resp = litellm.completion(**kwargs)
-        except Exception as e:
-            # Fallback: extract images from PDF and send as image_url parts
-            if "document" not in str(e):
-                err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-                raise
-            text = self._complete_with_pdf_images(
-                prompt=prompt,
-                pdf_bytes=pdf_bytes,
-                model_alias=model_alias,
-                system=system,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            success = True
-            return text
-        finally:
-            if not success and err is None:
-                # Will be set in the except block above if fallback also fails
-                pass
-
-        choice = resp.choices[0]
-        text = str(choice.message.content or "")
-        usage = getattr(resp, "usage", None)
-        if usage is not None:
-            pt = int(getattr(usage, "prompt_tokens", 0) or 0)
-            ct = int(getattr(usage, "completion_tokens", 0) or 0)
-        try:
-            cost = float(litellm.completion_cost(completion_response=resp))
-        except Exception:
-            cost = 0.0
-        success = True
-        duration_ms = int((time.perf_counter() - t0) * 1000)
-        self._log_call(
-            LLMCallRecord(
-                model=model,
-                prompt_tokens=pt,
-                completion_tokens=ct,
-                cost_usd=cost,
-                duration_ms=duration_ms,
-                handler=handler,
-                purpose=purpose,
-                success=success,
-                error=err,
-            )
-        )
-        return text
-
-    def _complete_with_pdf_images(
-        self,
-        prompt: str,
-        pdf_bytes: bytes,
-        model_alias: str,
-        system: str | None,
-        temperature: float,
-        max_tokens: int,
-    ) -> str:
-        """Fallback: extract images from PDF, OCR them, then send text to LLM."""
-        import pypdf
-        from io import BytesIO
-
-        try:
-            import pytesseract
-            from PIL import Image
-        except ImportError:
-            raise ExtractionError(
-                "PDF has no extractable text and pytesseract/PIL not installed. "
-                "Run: pip install pytesseract pillow"
-            )
-
-        reader = pypdf.PdfReader(BytesIO(pdf_bytes))
-        ocr_parts: list[str] = []
-        for i, page in enumerate(reader.pages):
-            page_ocr: list[str] = []
-            for img in page.images:
-                try:
-                    pil_img = Image.open(BytesIO(img.data))
-                    text = pytesseract.image_to_string(pil_img, lang="eng+deu").strip()
-                    if text:
-                        page_ocr.append(text)
-                except Exception:
-                    pass
-            if page_ocr:
-                ocr_parts.append(f"--- page {i + 1} (OCR) ---\n" + "\n\n".join(page_ocr))
-
-        if not ocr_parts:
-            raise ExtractionError("OCR returned no text from PDF images")
-
-        pdf_text = "\n\n".join(ocr_parts)
-        model = _resolve_model_name(self._aliases, model_alias)
-        messages: list[dict[str, Any]] = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt + "\n\nPDF text (OCR):\n" + pdf_text})
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **LLMProvider._complete_kwargs(model, model_alias),
-        }
-        resp = litellm.completion(**kwargs)
-        return str(resp.choices[0].message.content or "")
-
-
-# ---------------------------------------------------------------------------
-# Cost report (unchanged)
-# ---------------------------------------------------------------------------
-
-def _parse_llm_log_created_at(raw: str) -> datetime:
-    s = raw.strip()
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    dt = datetime.fromisoformat(s)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
 
 def format_llm_cost_report(log_path: Path, *, now: datetime | None = None) -> str:
     """Build LLM cost dashboard text for last 7 and 30 days from llm_calls.sqlite."""
+    from datetime import datetime, timedelta, timezone
+
     if not log_path.is_file():
         return f"No LLM call log found at {log_path}\n"
     conn = sqlite3.connect(str(log_path))
@@ -458,8 +247,9 @@ def format_llm_cost_report(log_path: Path, *, now: datetime | None = None) -> st
     parsed: list[tuple[str, float, datetime]] = []
     for purpose, cost_usd, created_at in rows_raw:
         try:
-            ts = _parse_llm_log_created_at(str(created_at))
-        except ValueError:
+            ts_str = str(created_at)
+            ts = datetime.strptime(ts_str[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except (ValueError, IndexError):
             continue
         try:
             cost = float(cost_usd or 0.0)
