@@ -170,18 +170,19 @@ class LLMProvider:
         purpose: str = "general",
     ) -> str:
         import base64
-        import litellm
 
         self._init_log()
         t0 = time.perf_counter()
         err: str | None = None
         text = ""
         model = model_alias
-        pt, ct = 0, 0
-        cost = 0.0
+        record_data: dict[str, Any] = {}
+
+        def _log_fn(log_rec: dict[str, Any]) -> None:
+            nonlocal record_data
+            record_data = log_rec
 
         try:
-            model = resolve_model(model_alias, aliases=self._aliases)
             b64 = base64.b64encode(pdf_bytes).decode("ascii")
             messages: list[dict[str, Any]] = [
                 {
@@ -195,19 +196,15 @@ class LLMProvider:
                     ],
                 }
             ]
-            resp = litellm.completion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
+            text = _agentkit_complete(
+                messages,
+                alias=model_alias,
                 max_tokens=max_tokens,
+                temperature=temperature,
+                aliases=self._aliases,
+                log_fn=_log_fn,
             )
-            choice = resp.choices[0]
-            text = str(choice.message.content or "")
-            usage = getattr(resp, "usage", None)
-            if usage is not None:
-                pt = int(getattr(usage, "prompt_tokens", 0) or 0)
-                ct = int(getattr(usage, "completion_tokens", 0) or 0)
-            cost = response_cost_usd(resp)
+            model = record_data.get("model", model_alias)
             return text
         except Exception as e:
             err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
@@ -217,9 +214,9 @@ class LLMProvider:
             self._log_call(
                 LLMCallRecord(
                     model=model,
-                    prompt_tokens=pt,
-                    completion_tokens=ct,
-                    cost_usd=cost,
+                    prompt_tokens=record_data.get("input_tokens", 0),
+                    completion_tokens=record_data.get("output_tokens", 0),
+                    cost_usd=record_data.get("cost_usd", 0.0),
                     duration_ms=duration_ms,
                     handler=handler,
                     purpose=purpose,

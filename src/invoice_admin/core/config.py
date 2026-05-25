@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+from agentkit.core import expand_path as _expand_path, load_yaml_mapping
 
 from invoice_admin.core.errors import ConfigError
 
@@ -68,24 +68,8 @@ def repo_root() -> Path:
     return _repo_root(env_var="INVOICE_ADMIN_REPO_ROOT")
 
 
-def _expand_path(value: str | Path | None, default: Path) -> Path:
-    if value is None or value == "":
-        return default
-    p = Path(value).expanduser()
-    if not p.is_absolute():
-        return (Path.cwd() / p).resolve()
-    return p.resolve()
-
-
 def _load_yaml(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        raise ConfigError(f"Config file not found: {path}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ConfigError(f"Config root must be a mapping: {path}")
-    return data
+    return load_yaml_mapping(path, error_cls=ConfigError)
 
 
 def _merge_sepa_with_env(sepa: dict[str, Any]) -> dict[str, Any]:
