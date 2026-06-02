@@ -288,13 +288,13 @@ def main(argv: list[str] | None = None) -> int:
             print(str(e), file=sys.stderr)
             return 2
 
-        if not args.dry_run and not args.yes:
-            from invoice_admin.googleads.addresses import CC_RECIPIENTS
-            print(f"About to send {month_str} invoice:", file=sys.stderr)
-            print(f"  To: {to_addr}", file=sys.stderr)
-            print(f"  CC: {', '.join(CC_RECIPIENTS)}", file=sys.stderr)
-            from invoice_admin.googleads.addresses import BCC_RECIPIENTS
-            print(f"  BCC: {', '.join(BCC_RECIPIENTS)}", file=sys.stderr)
+        if not args.dry_run:
+            print(
+                "About to save commission PDF:",
+                file=sys.stderr,
+            )
+            print(f"  Query: {query}", file=sys.stderr)
+            print(f"  Destination: {DROPBOX_INVOICE_DIR}", file=sys.stderr)
             try:
                 confirm = input("  Confirm? (Y/n): ").strip().lower()
             except (EOFError, KeyboardInterrupt):
