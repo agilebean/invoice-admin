@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from invoice_admin.googleads.addresses import DROPBOX_INVOICE_DIR
+from invoice_admin.googleads.addresses import DROPBOX_COMMISSION_DIR
 from invoice_admin.googleads.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
 from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
 from invoice_admin.googleads.gmail_facade import GmailTransportError
@@ -202,7 +202,7 @@ def save_commission_pdf(
         if dry_run:
             dest_dir = staging_root
         else:
-            dest_dir = commission_dir or Path(DROPBOX_INVOICE_DIR).expanduser()
+            dest_dir = commission_dir or Path(DROPBOX_COMMISSION_DIR).expanduser()
 
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / base_name

@@ -137,6 +137,13 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="Download and parse invoice PDF, print fields, skip SMTP send and confirmation.",
     )
+    send_p.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Skip interactive confirmation prompt (for scheduled/automated runs).",
+    )
 
     save_p = sub.add_parser(
         "save",
@@ -156,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "send":
-        if not args.dry_run:
+        if not args.dry_run and not args.yes:
             if os.environ.get(_ENV_CONFIRM_RUN_MONTH, "") != "1":
                 print(
                     f"Refusing: set {_ENV_CONFIRM_RUN_MONTH}=1 after confirming all "
@@ -218,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         month_str = billing_month_label_for_previous_calendar_month()
         if is_dry:
             print(f"DRY RUN — {month_str} invoice (no send):", file=sys.stderr)
+        elif args.yes:
+            pass
         else:
             from invoice_admin.googleads.addresses import CC_RECIPIENTS
             print(f"About to send {month_str} invoice:", file=sys.stderr)
@@ -279,13 +288,13 @@ def main(argv: list[str] | None = None) -> int:
             print(str(e), file=sys.stderr)
             return 2
 
-        if not args.dry_run:
-            print(
-                "About to save commission PDF:",
-                file=sys.stderr,
-            )
-            print(f"  Query: {query}", file=sys.stderr)
-            print(f"  Destination: {DROPBOX_INVOICE_DIR}", file=sys.stderr)
+        if not args.dry_run and not args.yes:
+            from invoice_admin.googleads.addresses import CC_RECIPIENTS
+            print(f"About to send {month_str} invoice:", file=sys.stderr)
+            print(f"  To: {to_addr}", file=sys.stderr)
+            print(f"  CC: {', '.join(CC_RECIPIENTS)}", file=sys.stderr)
+            from invoice_admin.googleads.addresses import BCC_RECIPIENTS
+            print(f"  BCC: {', '.join(BCC_RECIPIENTS)}", file=sys.stderr)
             try:
                 confirm = input("  Confirm? (Y/n): ").strip().lower()
             except (EOFError, KeyboardInterrupt):
