@@ -70,9 +70,9 @@ def main() -> int:
 
     secrets = _resolve_path(
         "Path to client_secret.json (from Google Cloud Console):\n"
-        "  (default: ~/Downloads/client_secret.json)\n> ",
+        "  (default: ~/.google/client_secret.json)\n> ",
         must_exist=True,
-        default="~/Downloads/client_secret.json",
+        default="~/.google/client_secret.json",
     )
 
     default_token = Path.home() / ".google" / "oauth_token.json"

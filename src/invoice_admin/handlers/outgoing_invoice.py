@@ -82,6 +82,7 @@ class OutgoingInvoiceHandler:
             str(email["test_recipient"]) if dry_run else str(client["email"])
         )
         dl = download_dir if download_dir is not None else Path.home() / "Downloads"
+        client_prefix = str(client.get("file_prefix", ""))
         return run_month(
             gmail_read_backend=gmail_read_backend,
             billing_query=query,
@@ -96,6 +97,7 @@ class OutgoingInvoiceHandler:
             dry_run=dry_run,
             month_label=month_label,
             dropbox_dir=dropbox_dir,
+            client_prefix=client_prefix,
         )
 
     def save_commission(

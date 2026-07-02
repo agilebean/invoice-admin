@@ -14,6 +14,7 @@ class InvoiceOutputFields:
     issue_date: date
     amount_eur: Decimal
     month_label: str
+    client_prefix: str = ""
 
 
 def build_renamed_pdf_filename(fields: InvoiceOutputFields) -> str:

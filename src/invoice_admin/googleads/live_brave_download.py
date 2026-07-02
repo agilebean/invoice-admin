@@ -43,10 +43,19 @@ class LiveBraveDownloadError(RuntimeError):
 
 
 def _build_download_filename(fields: InvoiceOutputFields) -> str:
-    """Build filename like \"2026-04-30 GoogleAds €6,496.76.pdf\"."""
+    """Build filename like '2026-06-30 Glugglejug GoogleAds Invoice June €6,789.06.pdf'."""
     d = fields.issue_date.isoformat()
-    amt = format(fields.amount_eur.quantize(Decimal("0.01")), "f")
-    return f"{d} GoogleAds €{amt}.pdf"
+    q = fields.amount_eur.quantize(Decimal("0.01"))
+    s = format(q, "f")
+    if "." in s:
+        int_part, frac_part = s.rsplit(".", 1)
+        frac_part = frac_part.rstrip("0") or "0"
+        amt = f"{int(int_part):,}" if frac_part == "0" else f"{int(int_part):,}.{frac_part}"
+    else:
+        amt = f"{int(s):,}"
+    prefix = f"{fields.client_prefix} " if fields.client_prefix else ""
+    month_name = fields.month_label.split()[0]
+    return f"{d} {prefix}GoogleAds Invoice {month_name} €{amt}.pdf"
 
 
 def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
@@ -99,6 +108,7 @@ def live_brave_download_pdf(
     navigation_timeout_s: float = 45,
     download_timeout_s: float = 120,
     verbose: bool = True,
+    client_prefix: str = "",
 ) -> Path:
     """Attach to Brave, navigate the billing deeplink, click Download, return local PDF path."""
 
@@ -238,6 +248,7 @@ def live_brave_download_pdf(
             issue_date=issue_date,
             amount_eur=amount_eur,
             month_label=month_label,
+            client_prefix=client_prefix,
         )
 
         _step(6, "Renaming...")

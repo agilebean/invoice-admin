@@ -78,6 +78,8 @@ def run_month(
     month_label: str | None = None,
     # Dropbox destination (None = use default from addresses.py)
     dropbox_dir: Path | None = None,
+    # Client prefix for filename
+    client_prefix: str = "",
 ) -> RunMonthReport:
     """Run the full monthly invoice flow: Gmail → Brave download → parse → SMTP send."""
     _t0 = time.monotonic()
@@ -142,6 +144,7 @@ def run_month(
             navigation_timeout_s=navigation_timeout_s,
             download_timeout_s=download_timeout_s,
             verbose=False,
+            client_prefix=client_prefix,
         )
     except LiveBraveDownloadError as e:
         raise RunMonthError(str(e)) from e
@@ -161,6 +164,7 @@ def run_month(
         issue_date=issue_date,
         amount_eur=amount_eur,
         month_label=label,
+        client_prefix=client_prefix,
     )
     # Use the actual saved filename as the attachment name
     attach_name = pdf_path.name

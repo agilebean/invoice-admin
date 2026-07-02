@@ -255,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                 smtp_sender=smtp_user if not is_dry else "dry-run@example.com",
                 to_address=to_addr if not is_dry else "dry-run@example.com",
                 dry_run=is_dry,
+                client_prefix="Glugglejug",
             )
         except RunMonthError as e:
             print(str(e), file=sys.stderr)

@@ -3,6 +3,7 @@ client:
   name: "The Gluggle Jug Factory"
   contact: "Jack Copeland"
   email: "jack.copeland@theglugglejugfactory.com"
+  file_prefix: "Glugglejug"
 
 email:
   sender: "chaehan.so@gmail.com"
