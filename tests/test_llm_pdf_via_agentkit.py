@@ -34,9 +34,9 @@ def test_complete_with_pdf_uses_agentkit_and_logs(tmp_path: Path, monkeypatch):
         captured.update(kwargs)
         return _Resp()
 
-    monkeypatch.setattr("agentkit.llm._litellm.litellm.completion", fake_completion)
+    monkeypatch.setattr("agentkit.llm._litellm._post_completion", fake_completion)
     monkeypatch.setattr(
-        "agentkit.llm._litellm.litellm.completion_cost", lambda **_: 0.002
+        "agentkit.llm._litellm._estimate_cost", lambda *a, **_: 0.002
     )
 
     log = tmp_path / "llm_calls.sqlite"
@@ -46,7 +46,7 @@ def test_complete_with_pdf_uses_agentkit_and_logs(tmp_path: Path, monkeypatch):
     )
 
     assert out == "PDF-OK"
-    # routed through agentkit -> the multimodal message reached litellm
+    # routed through agentkit -> the multimodal message reached the HTTP transport
     assert isinstance(captured.get("messages"), list)
     # logged a row with the captured cost
     row = sqlite3.connect(str(log)).execute(
