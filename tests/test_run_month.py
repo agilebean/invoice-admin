@@ -89,7 +89,7 @@ def test_run_month_happy_path(
     with patch(
         "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
         return_value=pdf_copy,
-    ):
+    ) as mock_download:
         report = run_month(
             gmail_read_backend=mock_gmail_backend,
             billing_query="from:payments-noreply",
@@ -111,6 +111,8 @@ def test_run_month_happy_path(
     assert report.recipient == "jack.copeland@theglugglejugfactory.com"
     assert report.send_status == "smtp:pdf:ok"
     assert len(report.steps) >= 5  # search, brave, parse, artifacts, send
+    # Inner download steps must stay visible so the flow never appears to hang.
+    assert mock_download.call_args.kwargs["verbose"] is True
 
 
 @_BRAVE_PATCH
@@ -153,6 +155,46 @@ def test_run_month_uses_auto_month_label(
 
 
 # ── run_month: error paths ──────────────────────────────────────────────
+
+
+@_BRAVE_PATCH
+def test_run_month_brave_launch_timeout_allows_cold_start(
+    _mock_brave: MagicMock,
+    mock_gmail_backend: MagicMock,
+    mock_smtp_backend: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Brave cold start can exceed 7s; run_month must wait much longer."""
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+    fixture_pdf = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "pdf"
+        / "invoice_eur_dot_decimal.pdf"
+    )
+    pdf_copy = tmp_path / fixture_pdf.name
+    pdf_copy.write_bytes(fixture_pdf.read_bytes())
+
+    with patch(
+        "invoice_admin.googleads.live_brave_download.live_brave_download_pdf",
+        return_value=pdf_copy,
+    ):
+        run_month(
+            gmail_read_backend=mock_gmail_backend,
+            billing_query="from:payments-noreply",
+            max_scan=5,
+            debugger_address="127.0.0.1:9222",
+            download_dir=download_dir,
+            smtp_backend=mock_smtp_backend,
+            smtp_sender="me@gmail.com",
+            to_address="you@test.com",
+            month_label="April 2026",
+            dropbox_dir=tmp_path,
+        )
+    _mock_brave.assert_called_once_with(
+        "127.0.0.1:9222", launch_timeout_s=11.0
+    )
 
 
 @_BRAVE_PATCH

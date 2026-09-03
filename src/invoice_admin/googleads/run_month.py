@@ -135,7 +135,7 @@ def run_month(
     )
 
     _step(3, "Launching Brave to download invoice PDF...")
-    ensure_brave_running(debugger_address, launch_timeout_s=7.0)
+    ensure_brave_running(debugger_address, launch_timeout_s=11.0)
     try:
         pdf_path = live_brave_download_pdf(
             debugger_address=debugger_address,
@@ -143,7 +143,7 @@ def run_month(
             download_dir=download_dir,
             navigation_timeout_s=navigation_timeout_s,
             download_timeout_s=download_timeout_s,
-            verbose=False,
+            verbose=True,
             client_prefix=client_prefix,
         )
     except LiveBraveDownloadError as e:
