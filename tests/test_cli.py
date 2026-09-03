@@ -51,6 +51,32 @@ def test_cli_send_unknown_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert code == 2
 
 
+def test_cli_send_passes_dry_run_to_handler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``invoice send --client gluggle`` must call the handler with ``dry_run=`` (not ``test_run=``)."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
+    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
+    monkeypatch.setenv("INVOICE_ADMIN_SEND_TEST", "1")
+    _write_min_repo(tmp_path)
+
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send:
+        code = main(["send", "--client", "gluggle"])
+    assert code == 0
+    kwargs = mock_send.call_args.kwargs
+    assert "test_run" not in kwargs
+    assert kwargs["dry_run"] is True
+
+
 def test_cli_ingest_email_no_gmail_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``invoice ingest --email`` without Gmail OAuth token returns 2 (auth error)."""
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))

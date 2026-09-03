@@ -365,7 +365,7 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
         handler.send_monthly_invoice(
             gmail_read_backend=gmail_backend,
             smtp_backend=smtp_backend,
-            test_run=test_run,
+            dry_run=test_run,
             month_label=args.month,
             to_address=to_address if test_run else None,
         )
