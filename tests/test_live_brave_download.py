@@ -11,6 +11,7 @@ import pytest
 from invoice_admin.googleads.live_brave_download import (
     LiveBraveDownloadError,
     _find_download_on_documents_page,
+    _new_completed_pdf,
     live_brave_download_pdf,
 )
 from invoice_admin.googleads.cli import main
@@ -112,6 +113,80 @@ class TestFindDownloadOnDocumentsPage:
         assert result is el
 
 
+# ── _new_completed_pdf ─────────────────────────────────────────────────
+
+
+class TestNewCompletedPdf:
+    def _snap(self, p: Path) -> tuple[Path, tuple[int, float]]:
+        st = p.stat()
+        return (p.resolve(), (st.st_size, st.st_mtime))
+
+    def test_ignores_pre_existing_unchanged_pdf(self, tmp_path: Path) -> None:
+        """A PDF that existed at click time with the same size must not be picked.
+
+        Regression: the old wait loop compared st_mtime (wall clock) against
+        ``time.monotonic()``, so any old PDF matched and was returned immediately.
+        """
+        old = tmp_path / "old_report.pdf"
+        old.write_bytes(b"%PDF-1.4 stale")
+        before = dict([self._snap(old)])
+        assert _new_completed_pdf(tmp_path, before=before) is None
+
+    def test_returns_new_pdf(self, tmp_path: Path) -> None:
+        old = tmp_path / "old_report.pdf"
+        old.write_bytes(b"%PDF-1.4 stale")
+        before = dict([self._snap(old)])
+        new = tmp_path / "invoice.pdf"
+        new.write_bytes(b"%PDF-1.4 fresh")
+        assert _new_completed_pdf(tmp_path, before=before) == new.resolve()
+
+    def test_returns_pdf_that_grew_since_snapshot(self, tmp_path: Path) -> None:
+        growing = tmp_path / "invoice.pdf"
+        growing.write_bytes(b"partial")
+        before = dict([self._snap(growing)])
+        growing.write_bytes(b"partial but now complete")
+        assert _new_completed_pdf(tmp_path, before=before) == growing.resolve()
+
+    def test_returns_overwritten_pdf_with_same_size_and_newer_mtime(
+        self, tmp_path: Path
+    ) -> None:
+        """A re-download that overwrites the file with identical bytes must still count.
+
+        Regression: ``invoice send`` re-downloads the same monthly invoice, which
+        overwrites the file in place (same path, same size, newer mtime). The old
+        path+size comparison classified it as the pre-existing file, so the wait
+        loop stalled at [5/6] until the 120s timeout.
+        """
+        import os
+        import time
+
+        invoice = tmp_path / "5678778429.pdf"
+        invoice.write_bytes(b"%PDF-1.4 same invoice bytes")
+        before = dict([self._snap(invoice)])
+        time.sleep(0.02)
+        os.utime(invoice, None)  # newer mtime, same path and size
+        assert _new_completed_pdf(tmp_path, before=before) == invoice.resolve()
+
+    def test_pending_crdownload_blocks_selection(self, tmp_path: Path) -> None:
+        new = tmp_path / "invoice.pdf"
+        new.write_bytes(b"%PDF-1.4 fresh")
+        (tmp_path / "invoice.pdf.crdownload").write_bytes(b"")
+        assert _new_completed_pdf(tmp_path, before={}) is None
+
+    def test_picks_newest_among_multiple_new(self, tmp_path: Path) -> None:
+        import os
+        import time
+
+        first = tmp_path / "a.pdf"
+        first.write_bytes(b"%PDF-1.4 one")
+        newest = tmp_path / "b.pdf"
+        newest.write_bytes(b"%PDF-1.4 two")
+        now = time.time()
+        os.utime(first, (now - 10, now - 10))
+        os.utime(newest, (now - 5, now - 5))
+        assert _new_completed_pdf(tmp_path, before={}) == newest.resolve()
+
+
 # ── live_brave_download_pdf ────────────────────────────────────────────
 
 
@@ -162,6 +237,7 @@ class TestLiveBraveDownloadPdf:
             download_dir=download_dir,
         )
         mock_driver.get.assert_called_once_with("https://c.gle/abc123")
+        mock_driver.set_page_load_timeout.assert_called_once_with(5)
         mock_el.click.assert_called_once()
         assert result_path.suffix == ".pdf"
         assert result_path.stat().st_size > 0
@@ -195,6 +271,44 @@ class TestLiveBraveDownloadPdf:
                     download_dir=download_dir,
                     navigation_timeout_s=0.1,
                 )
+        mock_save.assert_called_once()
+
+    def test_page_load_timeout_raises_instead_of_hanging(self, tmp_path: Path) -> None:
+        """A page load that never completes must surface as an error, not hang silently.
+
+        Regression: ``driver.get`` had no page-load timeout, so a c.gle redirect into
+        the ads.google.com documents SPA blocked for Selenium's 300s default with no
+        output (run_month prints nothing between [3/7] and [4/7]).
+        """
+        from selenium.common.exceptions import TimeoutException
+
+        download_dir = tmp_path / "downloads"
+        download_dir.mkdir()
+
+        mock_driver = MagicMock()
+        mock_driver.current_url = "https://ads.google.com/aw/billing/documents"
+        mock_driver.page_source = "<html>stuck</html>"
+        mock_driver.save_screenshot = MagicMock()
+        mock_driver.get.side_effect = TimeoutException("page load timed out")
+
+        with (
+            patch(
+                "invoice_admin.googleads.live_brave_download.chrome_driver_attach",
+                return_value=mock_driver,
+            ),
+            patch(
+                "invoice_admin.googleads.live_brave_download.save_live_brave_trace",
+                return_value=(tmp_path / "trace.html", tmp_path / "trace.png"),
+            ) as mock_save,
+        ):
+            with pytest.raises(LiveBraveDownloadError, match="Trace saved"):
+                live_brave_download_pdf(
+                    debugger_address="127.0.0.1:9222",
+                    deeplink_url="https://c.gle/hangs",
+                    download_dir=download_dir,
+                    navigation_timeout_s=45,
+                )
+        mock_driver.set_page_load_timeout.assert_called_once_with(45)
         mock_save.assert_called_once()
 
     def test_no_download_button_raises_and_saves_trace(self, tmp_path: Path) -> None:

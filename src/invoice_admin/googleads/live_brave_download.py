@@ -100,6 +100,37 @@ def _find_download_on_documents_page(driver: WebDriver) -> WebDriver:
     )
 
 
+def _new_completed_pdf(
+    download_dir: Path,
+    *,
+    before: dict[Path, tuple[int, float]],
+) -> Path | None:
+    """Return the newest PDF in ``download_dir`` that changed since the ``before`` snapshot.
+
+    ``before`` maps resolved PDF paths to ``(size, mtime)`` captured at click time.
+    A file is a candidate when it is new, its size changed, or its mtime advanced
+    (a re-download overwrites the same path with identical bytes). Any pending
+    ``*.crdownload`` means the browser is still writing, so ``None`` is returned.
+    """
+    if any(download_dir.glob("*.crdownload")):
+        return None
+    best: tuple[float, Path] | None = None
+    for p in download_dir.glob("*.pdf"):
+        key = p.resolve()
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if st.st_size <= 0:
+            continue
+        prev = before.get(key)
+        if prev is not None and prev[0] == st.st_size and st.st_mtime <= prev[1]:
+            continue
+        if best is None or st.st_mtime > best[0]:
+            best = (st.st_mtime, key)
+    return best[1] if best is not None else None
+
+
 def live_brave_download_pdf(
     *,
     debugger_address: str,
@@ -146,7 +177,20 @@ def live_brave_download_pdf(
     _step(2, "Navigating to billing documents...")
 
     try:
-        driver.get(deeplink_url)
+        # Bound driver.get: without this, a page that never fires "load" (c.gle
+        # redirect chain into the ads.google.com SPA) blocks for Selenium's 300s
+        # default with zero output, which looks like a hang.
+        driver.set_page_load_timeout(navigation_timeout_s)
+        try:
+            driver.get(deeplink_url)
+        except Exception as exc:
+            trace_paths = save_live_brave_trace(driver, label="billing_page_load_failed")
+            raise LiveBraveDownloadError(
+                f"Loading the billing deeplink failed or timed out "
+                f"({navigation_timeout_s}s page-load limit): {exc}\n"
+                f"Trace saved: {trace_paths[0]}, {trace_paths[1]}"
+            ) from exc
+
         try:
             handles = driver.window_handles
             if len(handles) > 1:
@@ -202,28 +246,34 @@ def live_brave_download_pdf(
             )
 
         _step(4, "Clicking Download...")
+        before = {
+            p.resolve(): (p.stat().st_size, p.stat().st_mtime)
+            for p in download_dir.glob("*.pdf")
+        }
         download_el.click()
         driver.switch_to.default_content()
         time.sleep(1)
 
         _step(5, "Waiting for PDF download...")
         deadline = time.monotonic() + download_timeout_s
-        start_mtime = time.monotonic() - 5
 
         pdf_path: Path | None = None
         while time.monotonic() < deadline:
-            for p in download_dir.iterdir():
-                if p.suffix.lower() == ".pdf" and p.stat().st_size > 0:
-                    try:
-                        mtime = p.stat().st_mtime
-                    except OSError:
-                        continue
-                    if mtime > start_mtime:
-                        pdf_path = p.resolve()
-                        break
-            if pdf_path:
-                break
             time.sleep(0.3)
+            candidate = _new_completed_pdf(download_dir, before=before)
+            if candidate is None:
+                continue
+            try:
+                size1 = candidate.stat().st_size
+            except OSError:
+                continue
+            time.sleep(0.6)
+            try:
+                if candidate.stat().st_size == size1:
+                    pdf_path = candidate
+                    break
+            except OSError:
+                continue
 
         if pdf_path is None:
             recent = sorted(
