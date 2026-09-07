@@ -1,12 +1,12 @@
 # invoice-admin
 
-PyPI / installable project name: **`invoice-admin`** (import package: `invoice_admin`). The Google Ads flows live under `invoice_admin.googleads` (P1 merge); the deprecated `googleads-invoice` console entry still works via a shim.
+PyPI / installable project name: **`invoice-admin`** (import package: `invoice_admin`). The Google Ads flows live under `invoice_admin.googleads`. The legacy `googleads-invoice` console entry and the `invoice googleads` group are removed; everything is one `invoice` CLI.
 
 **Rename:** this repo was **`billing-glugglejug`** on GitHub; it is now **`invoice-admin`**.
 
 Automates two related flows:
 
-1. **Monthly Google Ads invoice:** Gmail billing email → Brave PDF download → parse → email to Jack + Sophie/Rudi → Dropbox.
+1. **Monthly Google Ads invoice:** Gmail billing email → Brave PDF download → parse → email to Jack + Sophie/Rudi → Google Drive.
 2. **Jack commission PDF:** Gmail (commission mail) → PDF attachment staged under **Downloads** (visible in Finder) → parse EUR amount → rename and move to the **commissions** folder. No Brave, no SMTP. Optional Gmail query override: `GOOGLEADS_COMMISSION_QUERY`.
 
 ## Setup
@@ -31,25 +31,30 @@ pip install -e ".[dev,oauth]"
 
 ## CLI
 
+Client and provider keys come from `config/handlers/*.yaml` (`client.key` + `commission.provider`).
+Entity flags are optional while exactly one candidate exists; with several, the CLI refuses and
+lists the choices. `--client gluggle` is still accepted as an alias of `glugglejug`.
+
 ```
-invoice              # unified entry point → invoice_admin.cli
+invoice                 # unified entry point → invoice_admin.cli
   ingest <path>                 Classify + move PDF + tracker row
-  ingest --email <spark-url>   Fetch by Message-ID over IMAP (see .env.example)
+  ingest --email <spark-url>    Fetch by Message-ID over IMAP (see .env.example)
   watch [--source inbox|imap]   Poll local _inbox PDFs (default) or IMAP UNSEEN
-  status [--type] [--status]   Tracker listing
+  status [--type] [--status]    Tracker listing
   followup                      Run follow-up rules once
-  send --client gluggle [--month YYYY-MM]
+  send [--client KEY] [--month YYYY-MM] [--dry-run] [--yes]
+  save [--provider KEY] [--client KEY] [--month YYYY-MM] [--dry-run]
   retry <id> --approve          failed → received, clear error
   review <id> --approve         needs_review → received + restore type from notes
-  googleads                      Google Ads invoice + commission flows
-    send                          Full flow: Gmail → Brave download → parse → email → Dropbox
-    send --dry-run                Parse only, skip email send
-    save                          Gmail → commission PDF → Downloads staging → commissions folder
-    save --dry-run                Skip prompt; PDF lands under ~/Downloads only
-
-googleads-invoice      # Deprecated — use `invoice googleads` instead.
-  (Still functional; prints deprecation notice to stderr.)
 ```
+
+- `send` = monthly invoice to a client (Gmail → Brave download → parse → email → Google Drive).
+- `save` = commission PDF from a provider (Gmail → Downloads staging → commissions folder).
+- `send --dry-run` downloads and prints the invoice fields, no email. `send --yes` skips the
+  confirmation prompt for automated runs. `save --dry-run` skips the prompt and leaves the
+  renamed PDF under `~/Downloads` only.
+- `save --month YYYY-MM` targets one commission month: narrows the Gmail search to that month's
+  subject and verifies the found mail derives the same month, failing loudly otherwise.
 
 Renamed commission files look like: `2026-03 Commission € 1755.73.pdf` (month from the email subject + year from Gmail `internalDate`; amount from the PDF).
 
@@ -61,15 +66,17 @@ export GOOGLE_OAUTH_TOKEN="$HOME/.google/oauth_token.json"
 export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail/gmail-smtp-app-password"
 export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 
-# Dry run (parse + print fields, no email, no Dropbox):
-GOOGLEADS_CONFIRM_RUN_MONTH=1 \
-  invoice googleads send --dry-run
+# Dry run (parse + print fields, no email, no Google Drive):
+invoice send --dry-run
 
 # Commission PDF only (OAuth; no Brave, no SMTP). Dry run writes to ~/Downloads:
-invoice googleads save --dry-run
+invoice save --dry-run
 
-# Production: interactive confirm, then Dropbox commissions folder (+ staged file under Downloads first)
-invoice googleads save
+# Production: interactive confirm, then Google Drive commissions folder (+ staged file under Downloads first)
+invoice save
+
+# Target a specific commission month (searches by subject month, verifies the match):
+invoice save --month 2026-07
 ```
 
 ### Production send
@@ -79,8 +86,10 @@ Brave must be closed before running. Start it with:
 ```bash
 open -a "Brave Browser" --args --remote-debugging-port=9222
 sleep 3
-GOOGLEADS_CONFIRM_RUN_MONTH=1 invoice googleads send
+invoice send
 ```
+
+`invoice send` asks for confirmation unless you pass `--yes` (used by `scripts/run-monthly.sh`).
 
 ## Monthly scheduling (launchd)
 
@@ -114,7 +123,7 @@ Before high-risk steps, satisfy these **human** gates (details in **`docs/PROJEC
 |--------|------|
 | **Foyer** live portal run | Three real ingested invoices: extraction + classifier confidence look right. |
 | **SEPA** dry-run on a real bill | Review the logged payload (IBAN, amount, Verwendungszweck) field-by-field. |
-| **Retiring** `googleads-invoice` / old send path | Byte-level or documented parity on the same inputs--**explicit OK** before removing the entrypoint. |
+| **Retiring** `googleads-invoice` / old send path | Byte-level or documented parity on the same inputs--**explicit OK** before removing the entrypoint. | **Done 2026-09-07:** `googleads-invoice` script, `googleads_invoice` shim, and `invoice googleads` group removed; `invoice send/save --client/--provider` are the only surface. |
 | **SEPA live** (`dry_run: false`) | Joint review of **14 days** of dry-run logs vs what you would have typed manually. |
 
 ## `invoice_admin` config and env
@@ -137,8 +146,7 @@ Before high-risk steps, satisfy these **human** gates (details in **`docs/PROJEC
 
 | Item | Purpose |
 |------|---------|
-| `src/invoice_admin/` | Generic ingest, classify, handlers, follow-up, `invoice` CLI -- includes `googleads/` subpackage (P1 merge) |
-| `src/googleads_invoice/` | Thin PEP 562 shim → `invoice_admin.googleads` (deprecated backward compat) |
+| `src/invoice_admin/` | Generic ingest, classify, handlers, follow-up, `invoice` CLI -- includes `googleads/` subpackage |
 | `tests/` | Fast pytest suite |
 | `scripts/` | OAuth bootstrapper, launchd plist, wrapper script |
 | `docs/` | Workflow docs, constraints, interview |

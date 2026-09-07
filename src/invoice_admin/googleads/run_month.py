@@ -33,7 +33,7 @@ from invoice_admin.googleads.invoice_pdf import InvoicePdfError, parse_invoice_p
 from invoice_admin.googleads.addresses import (
     CC_RECIPIENTS,
     BCC_RECIPIENTS,
-    DROPBOX_INVOICE_DIR,
+    GOOGLE_DRIVE_INVOICE_DIR,
 )
 
 
@@ -76,7 +76,7 @@ def run_month(
     dry_run: bool = False,
     # Month label (None = auto from previous calendar month)
     month_label: str | None = None,
-    # Dropbox destination (None = use default from addresses.py)
+    # Destination folder (None = use default from addresses.py)
     dropbox_dir: Path | None = None,
     # Client prefix for filename
     client_prefix: str = "",
@@ -196,8 +196,8 @@ def run_month(
             raise RunMonthError(f"SMTP send failed: {e}") from e
         steps.append(f"Email sent (status: {status})")
 
-    _step(7, "Moving file to Dropbox...")
-    dropbox_dir = dropbox_dir or Path(DROPBOX_INVOICE_DIR).expanduser()
+    _step(7, "Moving file to destination...")
+    dropbox_dir = dropbox_dir or Path(GOOGLE_DRIVE_INVOICE_DIR).expanduser()
     dropbox_dir.mkdir(parents=True, exist_ok=True)
     dest = dropbox_dir / pdf_path.name
     if dest.is_file():
@@ -212,7 +212,7 @@ def run_month(
     shutil.move(str(pdf_path), str(dest))
     if not dest.is_file():
         raise RunMonthError(f"File move failed: {pdf_path} -> {dest}")
-    steps.append(f"Moved to Dropbox: {dest}")
+    steps.append(f"Moved to: {dest}")
 
     _tot = time.monotonic() - _t0
     print(f"  Done ({_tot:.1f}s total)", flush=True)

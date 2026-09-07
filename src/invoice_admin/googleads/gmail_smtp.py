@@ -2,11 +2,43 @@
 
 from __future__ import annotations
 
+import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
+from invoice_admin.googleads.addresses import DEFAULT_GMAIL_SENDER
 from invoice_admin.googleads.gmail_facade import GmailMessageSummary, GmailTransportError
+
+_ENV_SMTP_USER = "GOOGLEADS_GMAIL_SMTP_USER"
+_ENV_SMTP_PW = "GOOGLEADS_GMAIL_SMTP_APP_PASSWORD"
+_ENV_SMTP_PW_FILE = "GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE"
+
+
+def _smtp_login_user() -> str:
+    """SMTP login / From: ``GOOGLEADS_GMAIL_SMTP_USER`` or project Gmail default."""
+    return os.environ.get(_ENV_SMTP_USER, "").strip() or DEFAULT_GMAIL_SENDER
+
+
+def _smtp_app_password_from_env() -> str:
+    """Return Gmail app password from env, or first line of *password file* (more secure than export)."""
+    raw_path = os.environ.get(_ENV_SMTP_PW_FILE, "").strip()
+    if raw_path:
+        path = Path(raw_path).expanduser()
+        if not path.is_file():
+            raise ValueError(
+                f"{_ENV_SMTP_PW_FILE} is not a file: {path} "
+                f"(use chmod 600; never commit this file)."
+            )
+        raw = path.read_text(encoding="utf-8")
+        lines = raw.strip().splitlines()
+        if not lines:
+            raise ValueError(f"{_ENV_SMTP_PW_FILE} is empty: {path}")
+        line = lines[0].strip()
+        if not line:
+            raise ValueError(f"{_ENV_SMTP_PW_FILE} is empty: {path}")
+        return line
+    return os.environ.get(_ENV_SMTP_PW, "").strip()
 
 
 class SmtpGmailBackend:
@@ -14,7 +46,7 @@ class SmtpGmailBackend:
 
     Create an app password: Google Account → Security → 2-Step Verification → App passwords.
 
-    **CLI:** ``googleads-invoice send-test-pdf`` loads the secret from
+    **CLI:** ``invoice send`` loads the secret from
     ``GOOGLEADS_GMAIL_SMTP_APP_PASSWORD`` or the first line of
     ``GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE``, then constructs this backend (never commit secrets).
     """

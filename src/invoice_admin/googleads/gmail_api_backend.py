@@ -1,7 +1,7 @@
 """Gmail API read path (``users.messages.list`` / ``get``) using OAuth token file from disk.
 
-Send still uses :class:`~googleads_invoice.gmail_smtp.SmtpGmailBackend` — this backend only implements
-:class:`~googleads_invoice.gmail_facade.GmailBackend` ``list_messages``.
+Send still uses :class:`~invoice_admin.googleads.gmail_smtp.SmtpGmailBackend` — this backend only implements
+:class:`~invoice_admin.googleads.gmail_facade.GmailBackend` ``list_messages``.
 """
 
 from __future__ import annotations

@@ -44,7 +44,7 @@ def test_send_monthly_invoice_passes_dropbox_from_yaml(monkeypatch) -> None:
     assert calls["smtp_backend"] is s
     assert calls["dry_run"] is True
     assert calls["to_address"] == cfg["email"]["test_recipient"]
-    exp_drop = Path(cfg["paths"]["dropbox_invoice_dir"]).expanduser().resolve()
+    exp_drop = Path(cfg["paths"]["invoice_dir"]).expanduser().resolve()
     assert calls["dropbox_dir"] == exp_drop
     assert calls["billing_query"] == cfg["billing"]["query"]
     assert calls["debugger_address"] == f"127.0.0.1:{cfg['billing']['brave_debug_port']}"

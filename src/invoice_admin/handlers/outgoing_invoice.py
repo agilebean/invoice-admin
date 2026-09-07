@@ -1,4 +1,4 @@
-"""Outgoing invoice handler — wraps existing googleads_invoice functionality."""
+"""Outgoing invoice handler — wraps existing invoice_admin.googleads functionality."""
 from __future__ import annotations
 
 import json
@@ -12,9 +12,9 @@ from invoice_admin.core.tracker import InvoiceRow, Tracker
 
 
 class OutgoingInvoiceHandler:
-    """Wraps googleads_invoice for Gluggle Jug: monthly invoice send + commission PDF save.
+    """Wraps invoice_admin.googleads for Gluggle Jug: monthly invoice send + commission PDF save.
 
-    CC/BCC for production SMTP still come from ``googleads_invoice.addresses`` inside
+    CC/BCC for production SMTP still come from ``invoice_admin.googleads.addresses`` inside
     ``run_month`` until that package is refactored; YAML ``email.cc`` / ``email.bcc`` mirror intent.
     """
 
@@ -42,7 +42,7 @@ class OutgoingInvoiceHandler:
         invoice_pdf_path: Path,
         month_label: str | None = None,
     ) -> Any:
-        """Same contract as ``googleads_invoice.pipeline.run_dry_run`` (fixture-driven)."""
+        """Same contract as ``invoice_admin.googleads.pipeline.run_dry_run`` (fixture-driven)."""
         from invoice_admin.googleads.billing_period import billing_month_label_for_previous_calendar_month
         from invoice_admin.googleads.pipeline import run_dry_run
 
@@ -66,7 +66,7 @@ class OutgoingInvoiceHandler:
         download_timeout_s: float = 120,
         max_scan: int = 5,
     ) -> Any:
-        """Run Gmail → Brave → parse → SMTP → Dropbox using YAML wiring."""
+        """Run Gmail → Brave → parse → SMTP → Google Drive using YAML wiring."""
         from invoice_admin.googleads.run_month import run_month
 
         billing = self._cfg["billing"]
@@ -76,7 +76,7 @@ class OutgoingInvoiceHandler:
         port = int(billing["brave_debug_port"])
         debugger_address = f"127.0.0.1:{port}"
         query = str(billing["query"])
-        dropbox_dir = self._expand_path(str(paths["dropbox_invoice_dir"]))
+        dropbox_dir = self._expand_path(str(paths["invoice_dir"]))
         smtp_sender = str(email["sender"])
         recipient = to_address or (
             str(email["test_recipient"]) if dry_run else str(client["email"])
@@ -108,17 +108,19 @@ class OutgoingInvoiceHandler:
         downloads_dir: Path | None = None,
         commission_dir: Path | None = None,
         max_scan: int = 10,
+        commission_query: str | None = None,
+        expected_month: Any = None,
     ) -> Any:
-        """Search commission mail, stage PDF, parse, move to Dropbox (YAML paths)."""
+        """Search commission mail, stage PDF, parse, move to Google Drive (YAML paths)."""
         from invoice_admin.googleads.save_commission_pdf import save_commission_pdf as _save_commission
 
         commission = self._cfg["commission"]
         paths = self._cfg["paths"]
-        q = str(commission["query"])
+        q = commission_query or str(commission["query"])
         dest = (
             commission_dir
             if commission_dir is not None
-            else self._expand_path(str(paths["dropbox_commission_dir"]))
+            else self._expand_path(str(paths["commission_dir"]))
         )
         return _save_commission(
             gmail_read_backend=gmail_read_backend,
@@ -127,6 +129,7 @@ class OutgoingInvoiceHandler:
             commission_dir=dest,
             dry_run=dry_run,
             downloads_dir=downloads_dir,
+            expected_month=expected_month,
         )
 
     def execute(

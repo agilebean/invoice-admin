@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from invoice_admin.googleads.addresses import DROPBOX_COMMISSION_DIR
+from invoice_admin.googleads.addresses import GOOGLE_DRIVE_COMMISSION_DIR
 from invoice_admin.googleads.commission_pdf import CommissionPdfError, parse_commission_pdf_amount
 from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
 from invoice_admin.googleads.gmail_facade import GmailTransportError
@@ -107,6 +107,7 @@ def save_commission_pdf(
     commission_dir: Path | None = None,
     dry_run: bool = False,
     downloads_dir: Path | None = None,
+    expected_month: date | None = None,
 ) -> SaveCommissionReport:
     """Search Gmail for commission mail, stage PDF under Downloads (visible), parse, save renamed file."""
     _t0 = time.monotonic()
@@ -156,6 +157,20 @@ def save_commission_pdf(
         if got is None:
             continue
         b, subj, idms = got
+        if expected_month is not None:
+            try:
+                candidate = _commission_date_from_email(subj, idms)
+            except SaveCommissionPdfError:
+                continue
+            if candidate != expected_month:
+                steps.append(
+                    f"Skipped {r.id}: derived {candidate.isoformat()} != expected {expected_month.isoformat()}"
+                )
+                print(
+                    f"  Skipping {r.id}: {candidate.isoformat()} != {expected_month.isoformat()}",
+                    flush=True,
+                )
+                continue
         message_id = r.id
         pdf_bytes = b
         subject_s = subj
@@ -164,6 +179,11 @@ def save_commission_pdf(
         break
 
     if pdf_bytes is None or message_id is None:
+        if expected_month is not None:
+            raise SaveCommissionPdfError(
+                f"No PDF attachment matching {expected_month.isoformat()} "
+                f"in any of the {len(rows)} matching commission emails"
+            )
         raise SaveCommissionPdfError(
             f"No PDF attachment found in any of the {len(rows)} matching commission emails"
         )
@@ -190,6 +210,13 @@ def save_commission_pdf(
             f"Commission period: {commission_date.isoformat()} (from mail subject + year)"
         )
 
+        if expected_month is not None and commission_date != expected_month:
+            raise SaveCommissionPdfError(
+                f"Expected commission month {expected_month.isoformat()} "
+                f"but mail subject + sent date yield {commission_date.isoformat()} "
+                f"(subject: {subject_s!r})"
+            )
+
         _step(6, "Moving renamed file to destination...")
         month_display = calendar.month_name[commission_date.month]
         amount_str = _eur_commission_filename_amount(amount_eur)
@@ -202,7 +229,7 @@ def save_commission_pdf(
         if dry_run:
             dest_dir = staging_root
         else:
-            dest_dir = commission_dir or Path(DROPBOX_COMMISSION_DIR).expanduser()
+            dest_dir = commission_dir or Path(GOOGLE_DRIVE_COMMISSION_DIR).expanduser()
 
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / base_name

@@ -65,6 +65,104 @@ def test_save_commission_pdf_happy_path(
     assert not list(downloads.glob("Commission download*.pdf"))
 
 
+def test_save_commission_pdf_expected_month_mismatch_raises(
+    mock_gmail_backend: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A mail whose derived month differs from ``expected_month`` must fail loudly."""
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir(parents=True)
+    with pytest.raises(SaveCommissionPdfError, match="2026-07"):
+        save_commission_pdf(
+            gmail_read_backend=mock_gmail_backend,
+            commission_query="from:jack.copeland@theglugglejugfactory.com commission",
+            max_scan=10,
+            commission_dir=tmp_path / "Commissions",
+            downloads_dir=downloads,
+            expected_month=date(2026, 7, 1),
+        )
+
+
+def test_save_commission_pdf_expected_month_match_passes(
+    mock_gmail_backend: MagicMock,
+    tmp_path: Path,
+) -> None:
+    downloads = tmp_path / "Downloads"
+    commission_out = tmp_path / "Commissions"
+    downloads.mkdir(parents=True)
+    commission_out.mkdir(parents=True)
+    report = save_commission_pdf(
+        gmail_read_backend=mock_gmail_backend,
+        commission_query="from:jack.copeland@theglugglejugfactory.com commission",
+        max_scan=10,
+        commission_dir=commission_out,
+        downloads_dir=downloads,
+        expected_month=date(2026, 3, 1),
+    )
+    assert report.commission_date == date(2026, 3, 1)
+
+
+def test_save_commission_pdf_expected_month_scans_past_mails(
+    tmp_path: Path,
+) -> None:
+    """An older requested month must be found even when newer mails match the subject first."""
+    from datetime import datetime, timezone
+
+    fixture_pdf = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "pdf"
+        / "invoice_eur_dot_decimal.pdf"
+    )
+    pdf_bytes = fixture_pdf.read_bytes()
+    backend = MagicMock()
+    backend.list_messages.return_value = [
+        GmailMessageSummary(id="new-2025", thread_id="t2", snippet="March"),
+        GmailMessageSummary(id="old-2024", thread_id="t1", snippet="March"),
+    ]
+    # 2025-03-01 and 2024-03-01 in UTC ms
+    t2025 = int(datetime(2025, 3, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    t2024 = int(datetime(2024, 3, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    backend.get_message_pdf_with_metadata.side_effect = [
+        (pdf_bytes, "March Commission - The Gluggle Jug Factory", t2025),
+        (pdf_bytes, "March Commission - The Gluggle Jug Factory", t2024),
+    ]
+
+    downloads = tmp_path / "Downloads"
+    commission_out = tmp_path / "Commissions"
+    downloads.mkdir(parents=True)
+    commission_out.mkdir(parents=True)
+
+    report = save_commission_pdf(
+        gmail_read_backend=backend,
+        commission_query='from:jack.copeland@theglugglejugfactory.com commission subject:"March"',
+        max_scan=10,
+        commission_dir=commission_out,
+        downloads_dir=downloads,
+        expected_month=date(2024, 3, 1),
+    )
+    assert report.message_id == "old-2024"
+    assert report.commission_date == date(2024, 3, 1)
+    assert report.renamed_filename.startswith("2024-03")
+
+
+def test_save_commission_pdf_expected_month_no_match_raises(
+    mock_gmail_backend: MagicMock,
+    tmp_path: Path,
+) -> None:
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir(parents=True)
+    with pytest.raises(SaveCommissionPdfError, match="No PDF attachment matching 2024-03-01"):
+        save_commission_pdf(
+            gmail_read_backend=mock_gmail_backend,
+            commission_query="from:jack.copeland@theglugglejugfactory.com commission",
+            max_scan=10,
+            commission_dir=tmp_path / "Commissions",
+            downloads_dir=downloads,
+            expected_month=date(2024, 3, 1),
+        )
+
+
 def test_save_commission_pdf_dry_run_writes_under_downloads(
     mock_gmail_backend: MagicMock,
     tmp_path: Path,
@@ -200,91 +298,3 @@ def test_save_commission_pdf_no_month_in_subject(tmp_path: Path) -> None:
             commission_dir=commission_out,
             downloads_dir=downloads,
         )
-
-
-class TestCliSaveCommissionPdf:
-    def test_dry_run_skips_confirmation(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        from invoice_admin.googleads.cli import main
-
-        monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
-        mock_report = MagicMock()
-        mock_report.message_id = "m1"
-        mock_report.pdf_path = Path("2026-03 Commission March €1,234.56.pdf")
-        mock_report.commission_date = date(2026, 3, 1)
-        mock_report.amount_eur = Decimal("1234.56")
-        mock_report.renamed_filename = "2026-03 Commission March €1,234.56.pdf"
-
-        with (
-            patch(
-                "invoice_admin.googleads.cli.GmailApiReadBackend.from_env",
-            ),
-            patch(
-                "invoice_admin.googleads.cli.save_commission_pdf",
-                return_value=mock_report,
-            ) as mock_save,
-        ):
-            code = main(["save", "--dry-run"])
-            assert code == 0
-            assert mock_save.call_args.kwargs["dry_run"] is True
-
-    @patch("builtins.input", return_value="y")
-    def test_confirms_then_saves(
-        self,
-        mock_input: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        from invoice_admin.googleads.cli import main
-
-        monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
-        mock_report = MagicMock()
-        mock_report.message_id = "m1"
-        mock_report.pdf_path = Path("2026-04 Commission April €1,234.56.pdf")
-        mock_report.commission_date = date(2026, 4, 1)
-        mock_report.amount_eur = Decimal("1234.56")
-        mock_report.renamed_filename = "2026-04 Commission April €1,234.56.pdf"
-
-        with (
-            patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env"),
-            patch(
-                "invoice_admin.googleads.cli.save_commission_pdf",
-                return_value=mock_report,
-            ) as mock_save,
-        ):
-            code = main(["save"])
-            assert code == 0
-            assert mock_save.call_args.kwargs["dry_run"] is False
-
-    @patch("builtins.input", return_value="n")
-    def test_abort_on_no(
-        self,
-        mock_input: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        from invoice_admin.googleads.cli import main
-
-        monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "/tmp/dummy.json")
-        with patch("invoice_admin.googleads.cli.GmailApiReadBackend.from_env"):
-            code = main(["save"])
-            assert code == 2
-
-    def test_errors_when_oauth_missing(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        from invoice_admin.googleads.cli import main
-
-        monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
-        code = main(["save", "--dry-run"])
-        assert code == 2
-
-
-def test_cli_save_commission_pdf_help_lists_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
-    from invoice_admin.googleads.cli import main
-
-    with pytest.raises(SystemExit):
-        main(["save", "--help"])
-    err = capsys.readouterr()
-    combined = err.out + err.err
-    assert "save" in combined
-    assert "~/Downloads" in combined or "Downloads" in combined

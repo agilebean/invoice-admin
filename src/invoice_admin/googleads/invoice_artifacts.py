@@ -50,21 +50,12 @@ def _eur_plain_amount(amount: Decimal) -> str:
 
 
 def _eur_commission_filename_amount(amount: Decimal) -> str:
-    """Comma-grouped EUR digits for commission PDF filenames (after ``€``, no suffix symbol)."""
+    """Comma-grouped EUR digits for commission PDF filenames (after ``€``, always two decimals)."""
     q = amount.quantize(Decimal("0.01"))
     negative = q < 0
     q = abs(q)
-    s = format(q, "f")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    frac: str | None
-    if "." in s:
-        whole_s, frac = s.split(".", 1)
-    else:
-        whole_s = s
-        frac = None
-    grouped_int = f"{int(whole_s):,}"
-    body = grouped_int + (f".{frac}" if frac else "")
+    whole_s, frac = format(q, "f").split(".", 1)
+    body = f"{int(whole_s):,}.{frac}"
     return f"-{body}" if negative else body
 
 

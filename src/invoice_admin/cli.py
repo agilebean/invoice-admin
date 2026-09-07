@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+from datetime import date
 from pathlib import Path
 
 from invoice_admin.core.config import load_config, repo_root
@@ -14,13 +16,6 @@ def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point. Dispatches to subcommands."""
     if argv is None:
         argv = sys.argv[1:]
-
-    # --- `invoice googleads …` — forward entire remainder to googleads_invoice
-    if len(argv) >= 1 and argv[0] == "googleads":
-        os.environ["_GOOGLEADS_INVOICE_VIA_S6"] = "1"
-        from invoice_admin.googleads.cli import main as ga_main
-
-        return ga_main(argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="invoice",
@@ -51,15 +46,51 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("followup", help="Run followup engine once")
 
-    p_send = sub.add_parser("send", help="Send outgoing invoice manually")
+    p_send = sub.add_parser("send", help="Send a client's monthly invoice (Gmail → Brave → PDF → email)")
     p_send.add_argument(
         "--client",
-        required=True,
-        help="Client identifier (currently: gluggle)",
+        default=None,
+        help="Client identifier from config (e.g. glugglejug; required when more than one client is configured)",
     )
     p_send.add_argument(
         "--month",
         help="Billing month (YYYY-MM, defaults to previous calendar month)",
+    )
+    p_send.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Download and parse the invoice, print fields, skip the email send",
+    )
+    p_send.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip the interactive confirmation prompt (for scheduled/automated runs)",
+    )
+
+    p_save = sub.add_parser(
+        "save",
+        help="Save a provider's received document (commission PDF from Gmail → Downloads → commissions folder)",
+    )
+    p_save.add_argument(
+        "--provider",
+        default=None,
+        help="Provider identifier from config (e.g. googleads; required when more than one provider flow is configured)",
+    )
+    p_save.add_argument(
+        "--client",
+        default=None,
+        help="Client identifier, to disambiguate when a provider has flows for several clients",
+    )
+    p_save.add_argument(
+        "--month",
+        default=None,
+        help="Commission month (YYYY-MM); narrows the Gmail search and verifies the mail matches",
+    )
+    p_save.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Skip confirmation; stage the renamed PDF under ~/Downloads instead of the commissions folder",
     )
 
     p_retry = sub.add_parser("retry", help="Retry a failed invoice")
@@ -76,12 +107,6 @@ def main(argv: list[str] | None = None) -> int:
         "--approve",
         action="store_true",
         help="Confirm restoring classification from review notes",
-    )
-
-    # Listed for help visibility only; actual dispatch is intercepted above.
-    sub.add_parser(
-        "googleads",
-        help="Google Ads invoice and commission flows (passthrough to googleads-invoice)",
     )
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
@@ -106,6 +131,8 @@ def _dispatch(args: argparse.Namespace, config: object) -> int:
         return _cmd_followup(args, config)
     if args.command == "send":
         return _cmd_send(args, config)
+    if args.command == "save":
+        return _cmd_save(args, config)
     if args.command == "retry":
         return _cmd_retry(args, config)
     if args.command == "review":
@@ -297,43 +324,153 @@ def _cmd_followup(_args: argparse.Namespace, config: object) -> int:
     return 0
 
 
-def _cmd_send(args: argparse.Namespace, config: object) -> int:
-    """Send Gluggle outgoing invoice (requires Gmail, SMTP, Brave; same guards as legacy CLI)."""
-    if args.client != "gluggle":
-        print("send: only --client gluggle is supported", file=sys.stderr)
-        return 2
+def _client_registry(config: object) -> tuple[dict[str, tuple[str, dict]], dict[str, str]]:
+    """Return ``(canonical_client_key -> (handler_name, handler_cfg), alias -> canonical_key)``.
 
-    _ENV_CONFIRM_RUN_MONTH = "GOOGLEADS_CONFIRM_RUN_MONTH"
-    if os.environ.get(_ENV_CONFIRM_RUN_MONTH, "") != "1":
+    A handler is a client when its YAML has ``client.key`` and ``client.email``.
+    """
+    handlers = getattr(config, "raw", {}) or {}
+    handlers = handlers.get("handlers") or {}
+    clients: dict[str, tuple[str, dict]] = {}
+    aliases: dict[str, str] = {}
+    for name, h in handlers.items():
+        if not isinstance(h, dict):
+            continue
+        c = h.get("client")
+        if not isinstance(c, dict):
+            continue
+        key = c.get("key")
+        if not isinstance(key, str) or not key or not c.get("email"):
+            continue
+        clients[key] = (name, h)
+        for a in c.get("aliases") or []:
+            if isinstance(a, str) and a:
+                aliases[a] = key
+    return clients, aliases
+
+
+def _resolve_client(
+    args: argparse.Namespace, config: object
+) -> tuple[str, dict] | None:
+    """Pick the handler config for a ``--client`` value; error when unknown or ambiguous."""
+    clients, aliases = _client_registry(config)
+    if not clients:
         print(
-            f"Refusing: set {_ENV_CONFIRM_RUN_MONTH}=1 after confirming secrets, Brave, and recipient.",
+            "send: no clients configured; add client.key + client.email to a handler YAML "
+            "(e.g. config/handlers/outgoing_gluggle.yaml)",
             file=sys.stderr,
         )
-        return 2
+        return None
+    key = args.client
+    if key:
+        key = aliases.get(key, key)
+        if key not in clients:
+            print(
+                f"send: unknown client {args.client!r}; known clients: {', '.join(sorted(clients))}",
+                file=sys.stderr,
+            )
+            return None
+    elif len(clients) == 1:
+        key = next(iter(clients))
+    else:
+        print(
+            f"send: choose --client from: {', '.join(sorted(clients))}",
+            file=sys.stderr,
+        )
+        return None
+    return key, clients[key][1]
 
-    raw = getattr(config, "raw", {}) or {}
-    handlers = raw.get("handlers") or {}
-    hcfg = handlers.get("outgoing_gluggle")
-    if not hcfg:
-        print("send: missing config/handlers/outgoing_gluggle.yaml", file=sys.stderr)
-        return 2
 
-    from invoice_admin.googleads.addresses import DEFAULT_PRODUCTION_RECIPIENT, DEFAULT_TEST_RECIPIENT
-    from invoice_admin.googleads.cli import _smtp_app_password_from_env, _smtp_login_user
+def _provider_registry(config: object) -> list[tuple[str, str, str, dict]]:
+    """Return ``(provider, client_key, handler_name, handler_cfg)`` for every commission flow."""
+    handlers = getattr(config, "raw", {}) or {}
+    handlers = handlers.get("handlers") or {}
+    flows: list[tuple[str, str, str, dict]] = []
+    for name, h in handlers.items():
+        if not isinstance(h, dict):
+            continue
+        comm = h.get("commission")
+        if not isinstance(comm, dict):
+            continue
+        provider = comm.get("provider")
+        if not isinstance(provider, str) or not provider:
+            continue
+        c = h.get("client")
+        client_key = c.get("key") if isinstance(c, dict) else None
+        if not isinstance(client_key, str) or not client_key:
+            continue
+        flows.append((provider, client_key, name, h))
+    return flows
+
+
+def _resolve_provider(
+    args: argparse.Namespace, config: object
+) -> tuple[str, str, str, dict] | None:
+    """Pick the handler config for a ``--provider`` (+ optional ``--client``) value."""
+    flows = _provider_registry(config)
+    if not flows:
+        print(
+            "save: no provider flows configured; add commission.provider + client.key to a handler YAML",
+            file=sys.stderr,
+        )
+        return None
+    if args.provider:
+        flows = [f for f in flows if f[0] == args.provider]
+    if args.client:
+        clients, aliases = _client_registry(config)
+        ck = aliases.get(args.client, args.client)
+        flows = [f for f in flows if f[1] == ck]
+    if not flows:
+        known = sorted({f[0] for f in _provider_registry(config)})
+        print(
+            f"save: no provider flow matches (provider={args.provider!r}, client={args.client!r}); "
+            f"known providers: {', '.join(known)}",
+            file=sys.stderr,
+        )
+        return None
+    if len(flows) > 1:
+        options = ", ".join(f"{f[1]} ({f[0]})" for f in sorted(flows))
+        print(
+            f"save: matches multiple flows; choose --client from: {options}",
+            file=sys.stderr,
+        )
+        return None
+    return flows[0]
+
+
+def _cmd_send(args: argparse.Namespace, config: object) -> int:
+    """Send a client's monthly Google Ads invoice (requires Gmail, SMTP, Brave)."""
+    resolved = _resolve_client(args, config)
+    if resolved is None:
+        return 2
+    _client_key, hcfg = resolved
+
     from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
-    from invoice_admin.googleads.gmail_smtp import SmtpGmailBackend
+    from invoice_admin.googleads.gmail_smtp import (
+        _smtp_app_password_from_env,
+        _smtp_login_user,
+        SmtpGmailBackend,
+    )
 
     from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
 
     smtp_user = _smtp_login_user()
-    try:
-        smtp_pw = _smtp_app_password_from_env()
-    except ValueError as e:
-        print(str(e), file=sys.stderr)
-        return 2
-    if not smtp_pw:
-        print("send: set Gmail SMTP app password env (see googleads_invoice CLI docs).", file=sys.stderr)
-        return 2
+    is_dry = bool(args.dry_run)
+    if not is_dry:
+        try:
+            smtp_pw = _smtp_app_password_from_env()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        if not smtp_pw:
+            print(
+                "send: set Gmail SMTP app password env "
+                "(GOOGLEADS_GMAIL_SMTP_APP_PASSWORD or GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE).",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        smtp_pw = "dry-run"
 
     try:
         gmail_backend = GmailApiReadBackend.from_env()
@@ -341,16 +478,9 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
         print(str(e), file=sys.stderr)
         return 2
 
-    smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
-    handler = OutgoingInvoiceHandler(hcfg, gmail_read=gmail_backend, smtp=smtp_backend)
-
-    test_run = os.environ.get("INVOICE_ADMIN_SEND_TEST", "").strip() == "1"
-    to_address = DEFAULT_TEST_RECIPIENT if test_run else DEFAULT_PRODUCTION_RECIPIENT
-
-    if not test_run:
-        month_str = args.month or ""
-        print(f"About to send invoice ({month_str or 'default month'}) to production:", file=sys.stderr)
-        print(f"  To: {to_address}", file=sys.stderr)
+    if not is_dry and not args.yes:
+        client_email = str(hcfg["client"]["email"])
+        print(f"About to send invoice to {client_email}:", file=sys.stderr)
         try:
             confirm = input("  Confirm? (Y/n): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -359,15 +489,17 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
             print("Aborted.", file=sys.stderr)
             return 2
 
+    smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
+    handler = OutgoingInvoiceHandler(hcfg, gmail_read=gmail_backend, smtp=smtp_backend)
+
     from invoice_admin.googleads.run_month import RunMonthError
 
     try:
-        handler.send_monthly_invoice(
+        report = handler.send_monthly_invoice(
             gmail_read_backend=gmail_backend,
             smtp_backend=smtp_backend,
-            dry_run=test_run,
+            dry_run=is_dry,
             month_label=args.month,
-            to_address=to_address if test_run else None,
         )
     except RunMonthError as e:
         print(str(e), file=sys.stderr)
@@ -375,7 +507,97 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
     except Exception as e:
         print(f"send failed: {e}", file=sys.stderr)
         return 1
+    if is_dry:
+        print(f"  Billing URL: {report.billing_url}", file=sys.stderr)
+        print(f"  Invoice: {report.issue_date}, EUR {report.amount_eur}", file=sys.stderr)
+        print(f"  Filename: {report.renamed_filename}", file=sys.stderr)
+        print("Dry run complete (no email sent).", file=sys.stderr)
+        return 0
     print("send completed.", flush=True)
+    print(f"  Invoice: {report.issue_date}, EUR {report.amount_eur}", file=sys.stderr)
+    print(f"  Sent to: {report.recipient}", file=sys.stderr)
+    print(f"  Subject: {report.email_subject!r}", file=sys.stderr)
+    print(f"  Attachment: {report.renamed_filename}", file=sys.stderr)
+    return 0
+
+
+def _parse_commission_month(raw: str | None) -> date | None:
+    """Parse ``YYYY-MM`` into the first day of that month; None when no flag given."""
+    if raw is None:
+        return None
+    m = re.fullmatch(r"(\d{4})-(\d{2})", raw)
+    if not m:
+        return None
+    year, month = int(m.group(1)), int(m.group(2))
+    if not 1 <= month <= 12:
+        return None
+    return date(year, month, 1)
+
+
+def _cmd_save(args: argparse.Namespace, config: object) -> int:
+    """Save a provider's commission PDF (Gmail → Downloads staging → commissions folder)."""
+    resolved = _resolve_provider(args, config)
+    if resolved is None:
+        return 2
+    provider, client_key, _handler_name, hcfg = resolved
+
+    expected_month = _parse_commission_month(args.month)
+    if args.month and expected_month is None:
+        print(f"save: --month must be YYYY-MM (got {args.month!r})", file=sys.stderr)
+        return 2
+
+    from invoice_admin.googleads.gmail_api_backend import (
+        GmailApiReadBackend,
+        commission_mail_query_from_env,
+    )
+
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    try:
+        gmail_backend = GmailApiReadBackend.from_env()
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+
+    comm = hcfg["commission"]
+    query = (os.environ.get("GOOGLEADS_COMMISSION_QUERY", "").strip()
+             or str(comm.get("query") or "").strip()
+             or commission_mail_query_from_env())
+    if expected_month is not None:
+        import calendar
+        month_name = calendar.month_name[expected_month.month]
+        query = f'{query} subject:"{month_name}"'
+    dest = Path(str(hcfg["paths"]["commission_dir"])).expanduser()
+
+    if not args.dry_run:
+        print("About to save commission PDF:", file=sys.stderr)
+        print(f"  Client: {client_key}", file=sys.stderr)
+        print(f"  Provider: {provider}", file=sys.stderr)
+        print(f"  Query: {query}", file=sys.stderr)
+        print(f"  Destination: {dest}", file=sys.stderr)
+        try:
+            confirm = input("  Confirm? (Y/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            confirm = "n"
+        if confirm not in ("", "y", "yes"):
+            print("Aborted.", file=sys.stderr)
+            return 2
+
+    handler = OutgoingInvoiceHandler(hcfg, gmail_read=gmail_backend)
+    try:
+        report = handler.save_commission(
+            gmail_read_backend=gmail_backend,
+            dry_run=args.dry_run,
+            commission_query=query,
+            expected_month=expected_month,
+        )
+    except Exception as e:
+        print(f"save failed: {e}", file=sys.stderr)
+        return 1
+    print("Commission PDF saved successfully.", file=sys.stderr)
+    print(f"  PDF: {report.pdf_path}", file=sys.stderr)
+    print(f"  Date: {report.commission_date}, EUR {report.amount_eur}", file=sys.stderr)
+    print(f"  Renamed: {report.renamed_filename}", file=sys.stderr)
     return 0
 
 

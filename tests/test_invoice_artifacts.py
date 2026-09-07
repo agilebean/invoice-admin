@@ -23,8 +23,9 @@ def test_build_renamed_pdf_filename_deterministic() -> None:
 def test_commission_filename_amount_grouping_and_strip_cents() -> None:
     assert _eur_commission_filename_amount(Decimal("1755.73")) == "1,755.73"
     assert _eur_commission_filename_amount(Decimal("1234.56")) == "1,234.56"
-    assert _eur_commission_filename_amount(Decimal("1755.00")) == "1,755"
-    assert _eur_commission_filename_amount(Decimal("999")) == "999"
+    assert _eur_commission_filename_amount(Decimal("1755.00")) == "1,755.00"
+    assert _eur_commission_filename_amount(Decimal("999")) == "999.00"
+    assert _eur_commission_filename_amount(Decimal("1636.20")) == "1,636.20"
 
 
 def test_build_renamed_pdf_filename_whole_euros() -> None:

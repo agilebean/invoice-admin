@@ -25,12 +25,14 @@ BCC_RECIPIENTS = [
     "chaehan.so@gmail.com",
 ]
 
-# Dropbox folder to move the downloaded invoice PDF into (send action).
-DROPBOX_INVOICE_DIR = (
-    "/Users/chaehan/Library/CloudStorage/Dropbox/Finance/GluggleJug/GluggleJug GoogleAds"
+# Google Drive folder to move the downloaded invoice PDF into (send action).
+GOOGLE_DRIVE_INVOICE_DIR = (
+    "/Users/chaehan/Library/CloudStorage/GoogleDrive-chaehan.so@virtualfriend.chat/"
+    "My Drive/2 Areas/GluggleJug/GluggleJug GoogleAds"
 )
 
-# Dropbox folder for commission PDFs (save / save_commission action).
-DROPBOX_COMMISSION_DIR = (
-    "/Users/chaehan/Library/CloudStorage/Dropbox/Finance/GluggleJug/GluggleJug Commissions"
+# Google Drive folder for commission PDFs (save / save_commission action).
+GOOGLE_DRIVE_COMMISSION_DIR = (
+    "/Users/chaehan/Library/CloudStorage/GoogleDrive-chaehan.so@virtualfriend.chat/"
+    "My Drive/2 Areas/GluggleJug/GluggleJug Commissions"
 )

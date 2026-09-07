@@ -13,10 +13,10 @@ Usage
 
 2. Run::
 
-       GOOGLEADS_CONFIRM_LIVE_BRAVE=1 \\
-           GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222 \\
-           GOOGLEADS_BILLING_DEEPLINK="https://c.gle/..." \\
-           googleads-invoice live-brave-download
+       GOOGLEADS_BROWSER_DEBUGGER_ADDRESS=127.0.0.1:9222 \\
+       invoice send --dry-run
+
+   (``live_brave_download_pdf`` is invoked inside the monthly send pipeline.)
 """
 
 from __future__ import annotations

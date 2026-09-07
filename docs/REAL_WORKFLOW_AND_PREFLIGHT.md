@@ -1,6 +1,6 @@
 # Real workflow, preflight checks, plain vocabulary
 
-This file captures **your** monthly flow (Spark, Brave, Dropbox), **manual tests** you run before trusting automation, and words we use in **`PLAN.md`** / **`README.md`** without jargon.
+This file captures **your** monthly flow (Spark, Brave, Google Drive), **manual tests** you run before trusting automation, and words we use in **`PLAN.md`** / **`README.md`** without jargon.
 
 **Runtime limits and how we still ship real integration (agents, CI, your Mac):** see **[`CONSTRAINTS_AND_WORKAROUNDS.md`](CONSTRAINTS_AND_WORKAROUNDS.md)**.
 
@@ -12,7 +12,7 @@ This file captures **your** monthly flow (Spark, Brave, Dropbox), **manual tests
 Tiny **sample** HTML and PDF files live under `tests/fixtures/`. They are **only** there so `pytest` can run on every commit and prove things like: “we still find the billing link in HTML” and “we still read the invoice date and euros from a PDF.”
 
 - They are **not** your real invoices.
-- They are **not** your Dropbox files.
+- They are **not** your Google Drive files.
 - Passing CI means **the code still understands that shape of file** — not that your live Google Ads account or this month’s mail succeeded.
 
 **“Simulate the real thing” in tests**  
@@ -54,7 +54,7 @@ From the billing email:
 
 2. On **Billing → Documents**, tab **TAX AND STATUTORY DOCUMENTS** (and filters like document type **Tax invoice / Invoice**), use **Download** on the **top row** (most recent issue date).
 
-3. The browser typically saves the **raw** PDF to **`~/Downloads`** first. You may later **rename** and move it — for example into Dropbox (see below).
+3. The browser typically saves the **raw** PDF to **`~/Downloads`** first. You may later **rename** and move it — for example into the Google Drive GluggleJug folder (see below).
 
 **Schedule target (later slice, after real checks are green)**  
 Aim for **2nd of each month at 05:00 GMT** — only after **9.1–9.x** integration tests and/or Brave-profile automation are proven. Do not schedule **launchd** before the smallest real-world slices pass.
@@ -68,7 +68,7 @@ Screenshot of the Documents table (top row + Download): [`images/google-ads-bill
 
 After you organize files, a **renamed** example path looks like:
 
-`/Users/chaehan/Library/CloudStorage/Dropbox/Finance/GluggleJug/GluggleJug GoogleAds/2026-04-02 Glugglejug GoogleAds Invoice March €6,600.98.pdf`
+`/Users/chaehan/Library/CloudStorage/GoogleDrive-chaehan.so@virtualfriend.chat/My Drive/2 Areas/GluggleJug/GluggleJug GoogleAds/2026-04-02 Glugglejug GoogleAds Invoice March €6,600.98.pdf`
 
 Notes:
 
@@ -79,16 +79,10 @@ Notes:
 
 ## `dry-run` env vars (real paths)
 
-After Spark export + PDF on disk, set (or use `export` in your shell profile):
-
-- `GOOGLEADS_INVOICE_MAIL_HTML` — path to saved billing **HTML** (Spark export).
-- `GOOGLEADS_INVOICE_PDF` — path to the **PDF** (often `~/Downloads/...` until you move it).
-
-Then:
-
-```bash
-googleads-invoice dry-run
-```
+The CLI-level file dry-run (`googleads-invoice dry-run`) is removed. The remaining dry-run is
+the full `invoice send --dry-run` (Gmail search → Brave download → parse → print fields, no
+email). For parser-only checks, use `pytest` with the committed fixtures or `parse_invoice_pdf`
+from a Python shell.
 
 Month/year in Jack’s email copy come **only** from the billing clock rule in code — no manual month flag.
 
@@ -136,7 +130,7 @@ Open the latest matching thread and confirm it contains the **documents** deepli
 ## Next iteration (backlog)
 
 - **launchd** (or equivalent) for **2nd @ 05:00 GMT**.
-- Browser automation (already-skipped **`e2e`** pattern) extended to: follow deeplink, **Documents**, **Download** top row, optional move/rename toward Dropbox convention.
+- Browser automation (already-skipped **`e2e`** pattern) extended to: follow deeplink, **Documents**, **Download** top row, optional move/rename toward the Google Drive convention.
 - Optional: read/search mail via **Gmail API** instead of Spark export, when OAuth is in scope.
 
 See **`PLAN.md`** — **Iteration 9 (backlog)**.

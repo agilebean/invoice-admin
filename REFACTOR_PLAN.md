@@ -13,8 +13,8 @@ Legend: **Wrap** = call unchanged from adapter; **Lift** = move/refactor into sh
 
 | Module | Disposition | Destination / notes |
 |--------|-------------|---------------------|
-| `__init__.py`, `__main__.py` | Keep | Console `googleads-invoice` / `python -m googleads_invoice` until legacy entrypoint retired (**brief §15**). |
-| `cli.py` | Keep | Full argparse surface; `invoice send` delegates where configured. |
+| `__init__.py`, `__main__.py` | Removed 2026-09-07 | Console `googleads-invoice` / `python -m googleads_invoice` retired with the `invoice googleads` group (**brief §15** sign-off). |
+| `cli.py` | Removed 2026-09-07 | Full argparse surface replaced by top-level `invoice send/save` with `--client`/`--provider` registry resolution. |
 | `addresses.py` | Wrap + partial lift | Client constants mirrored in `config/handlers/outgoing_gluggle.yaml`; handler and legacy CLI still import `addresses` for parity paths—**do not delete** until sign-off (**brief §14**). |
 | `billing_period.py`, `billing_url.py` | Keep | Pure helpers; used by pipeline / run-month. |
 | `browser_download.py`, `live_brave_download.py`, `live_brave_trace.py` | Keep | Brave/WebDriver; obey `.cursor/rules/brave-for-google-ads.mdc`. |

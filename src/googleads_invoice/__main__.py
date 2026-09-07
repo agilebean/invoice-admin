@@ -1,8 +1,0 @@
-"""Deprecated — use ``invoice googleads …`` instead."""
-
-import sys
-
-from invoice_admin.googleads.cli import main
-
-if __name__ == "__main__":
-    raise SystemExit(main())

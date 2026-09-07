@@ -32,7 +32,27 @@ paths:
     (root / "config" / "default.yaml").write_text(cfg, encoding="utf-8")
     (root / "config" / "handlers").mkdir(parents=True, exist_ok=True)
     (root / "config" / "handlers" / "outgoing_gluggle.yaml").write_text(
-        "client:\n  email: test@example.com\n",
+        f"""client:
+  key: glugglejug
+  aliases: ["gluggle"]
+  name: Gluggle Jug
+  email: jack@example.com
+  file_prefix: Glugglejug
+email:
+  sender: me@example.com
+  test_recipient: me-test@example.com
+commission:
+  provider: googleads
+  rate: 0.03
+  sender_email: jack@example.com
+  query: from:jack@example.com commission
+billing:
+  query: from:payments-noreply@google.com billing
+  brave_debug_port: 9222
+paths:
+  invoice_dir: "{root / "GluggleJug GoogleAds"}"
+  commission_dir: "{root / "GluggleJug Commissions"}"
+""",
         encoding="utf-8",
     )
 
@@ -47,34 +67,296 @@ def test_cli_status_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 def test_cli_send_unknown_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
     _write_min_repo(tmp_path)
-    code = main(["send", "--client", "nope"])
+    code = main(["send", "--client", "nope", "--dry-run"])
     assert code == 2
 
 
-def test_cli_send_passes_dry_run_to_handler(
+def test_cli_send_default_client_when_single(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``invoice send --client gluggle`` must call the handler with ``dry_run=`` (not ``test_run=``)."""
+    """Bare ``invoice send --dry-run`` resolves the only configured client."""
     from unittest.mock import MagicMock, patch
 
     from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
     from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
 
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("GOOGLEADS_CONFIRM_RUN_MONTH", "1")
-    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
-    monkeypatch.setenv("INVOICE_ADMIN_SEND_TEST", "1")
     _write_min_repo(tmp_path)
-
     monkeypatch.setattr(
         GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
     )
     with patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send:
-        code = main(["send", "--client", "gluggle"])
+        code = main(["send", "--dry-run"])
     assert code == 0
     kwargs = mock_send.call_args.kwargs
-    assert "test_run" not in kwargs
     assert kwargs["dry_run"] is True
+
+
+def test_cli_send_client_alias_gluggle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--client gluggle`` resolves to the canonical ``glugglejug``."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send:
+        code = main(["send", "--client", "gluggle", "--dry-run"])
+    assert code == 0
+    mock_send.assert_called_once()
+
+
+def test_cli_send_dry_run_needs_no_smtp_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--dry-run`` must not require an SMTP app password."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", raising=False)
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send:
+        code = main(["send", "--dry-run"])
+    assert code == 0
+    mock_send.assert_called_once()
+
+
+def test_cli_send_requires_smtp_password_for_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production send without an SMTP app password refuses with code 2."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", raising=False)
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch("builtins.input") as mock_input:
+        code = main(["send", "--yes"])
+    assert code == 2
+    mock_input.assert_not_called()
+
+
+def test_cli_send_yes_skips_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--yes`` sends production without asking for confirmation."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with (
+        patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send,
+        patch("builtins.input") as mock_input,
+    ):
+        code = main(["send", "--yes"])
+    assert code == 0
+    mock_input.assert_not_called()
+    assert mock_send.call_args.kwargs["dry_run"] is False
+
+
+def test_cli_send_prompt_abort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production send aborts (code 2) when the user answers no."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch("builtins.input", return_value="n"):
+        code = main(["send"])
+    assert code == 2
+
+
+def test_cli_send_prompt_confirms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production send runs when the user confirms."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with (
+        patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send,
+        patch("builtins.input", return_value="y"),
+    ):
+        code = main(["send"])
+    assert code == 0
+    assert mock_send.call_args.kwargs["dry_run"] is False
+
+
+def test_cli_save_default_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare ``invoice save --dry-run`` resolves the only provider flow."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch.object(OutgoingInvoiceHandler, "save_commission") as mock_save:
+        code = main(["save", "--dry-run"])
+    assert code == 0
+    assert mock_save.call_args.kwargs["dry_run"] is True
+
+
+def test_cli_save_unknown_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    code = main(["save", "--provider", "metaads", "--dry-run"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "googleads" in err
+
+
+def test_cli_save_destination_line_points_at_commissions_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The confirmation must print the commissions folder, never the invoice folder."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with (
+        patch(
+            "invoice_admin.handlers.outgoing_invoice.OutgoingInvoiceHandler.save_commission",
+            return_value=MagicMock(),
+        ),
+        patch("builtins.input", return_value="y"),
+    ):
+        code = main(["save"])
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "GluggleJug Commissions" in err
+    assert "GluggleJug GoogleAds" not in err
+
+
+def test_cli_save_abort_on_no(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch("builtins.input", return_value="n"):
+        code = main(["save"])
+    assert code == 2
+
+
+def test_cli_save_dry_run_skips_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with (
+        patch.object(OutgoingInvoiceHandler, "save_commission") as mock_save,
+        patch("builtins.input") as mock_input,
+    ):
+        code = main(["save", "--dry-run"])
+    assert code == 0
+    mock_input.assert_not_called()
+    assert mock_save.call_args.kwargs["dry_run"] is True
+
+
+def test_cli_save_month_targets_subject_and_verifies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--month YYYY-MM`` narrows the Gmail query and pins the expected month."""
+    from datetime import date
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch.object(OutgoingInvoiceHandler, "save_commission") as mock_save:
+        code = main(["save", "--month", "2026-07", "--dry-run"])
+    assert code == 0
+    kwargs = mock_save.call_args.kwargs
+    assert kwargs["expected_month"] == date(2026, 7, 1)
+    assert 'subject:"July"' in kwargs["commission_query"]
+
+
+def test_cli_save_invalid_month(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    assert main(["save", "--month", "2026-13", "--dry-run"]) == 2
+    assert main(["save", "--month", "july", "--dry-run"]) == 2
+
+
+def test_cli_googleads_passthrough_removed() -> None:
+    """The ``invoice googleads`` namespace no longer exists."""
+    with pytest.raises(SystemExit):
+        main(["googleads"])
 
 
 def test_cli_ingest_email_no_gmail_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

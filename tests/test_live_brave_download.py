@@ -14,7 +14,6 @@ from invoice_admin.googleads.live_brave_download import (
     _new_completed_pdf,
     live_brave_download_pdf,
 )
-from invoice_admin.googleads.cli import main
 
 
 # ── _find_download_on_documents_page ────────────────────────────────────

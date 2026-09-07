@@ -110,7 +110,8 @@ def main() -> int:
     print(f'   export GOOGLE_OAUTH_TOKEN="{token_out}"')
     print()
     print("Then verify it works:")
-    print("   googleads-invoice list-billing-mail")
+    print("   invoice send --dry-run")
+    print("   invoice save --dry-run")
     print()
 
     return 0
