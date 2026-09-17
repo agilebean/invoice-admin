@@ -91,6 +91,29 @@ invoice send
 
 `invoice send` asks for confirmation unless you pass `--yes` (used by `scripts/run-monthly.sh`).
 
+## Foyer claims (live portal)
+
+Submit a health-insurance reimbursement on the Foyer portal (`myaccount.foyerglobalhealth.com`)
+with the shell function `foyerclaim` (`~/.bash_aliases`). It picks the newest PDF from
+`~/Library/CloudStorage/Dropbox/Health/Health Claims Foyer/`, shows it, asks for confirmation,
+then runs `scripts/foyer_claim.py`.
+
+Brave must be running with the debug port (shell alias `brave`). The script attaches over CDP to
+the real browser, so the passkey stays in Brave: if the portal asks for login, it prints a prompt
+and waits while the passkey is completed there.
+
+The script fills the Rückerstattung form (24h = Nein; country from the receipt currency or
+`--country`; upload; Kookmin KRW account for KRW bills, otherwise the EUR account), submits,
+waits 60 s, and verifies the claim under Schadenmeldung reaches status `Gesendet`.
+
+```bash
+foyerclaim                        # latest PDF, with confirmation
+foyerclaim path/to/receipt.pdf    # explicit file
+foyerclaim --dry-run              # fill and verify the form, do not submit
+foyerclaim --verify-only          # only check today's claim status
+python scripts/foyer_claim.py receipt.pdf --help   # full flags
+```
+
 ## Monthly scheduling (launchd)
 
 Runs automatically on the 2nd at 05:00 (starts and stops Brave).
