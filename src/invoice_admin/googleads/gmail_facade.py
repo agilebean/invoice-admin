@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from agentkit.gmail import GmailTransportError
+
 
 @dataclass(frozen=True)
 class GmailMessageSummary:
@@ -14,10 +16,6 @@ class GmailMessageSummary:
     id: str
     thread_id: str
     snippet: str
-
-
-class GmailTransportError(RuntimeError):
-    """Raised when listing or sending fails at the backend/transport layer."""
 
 
 @runtime_checkable

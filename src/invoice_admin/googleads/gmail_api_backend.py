@@ -1,6 +1,7 @@
 """Gmail API read path (``users.messages.list`` / ``get``) using OAuth token file from disk.
 
-Send still uses :class:`~invoice_admin.googleads.gmail_smtp.SmtpGmailBackend` — this backend only implements
+Send now uses :class:`agentkit.gmail.SmtpGmailBackend` (re-exported at
+``invoice_admin.googleads.gmail_smtp``) — this backend only implements
 :class:`~invoice_admin.googleads.gmail_facade.GmailBackend` ``list_messages``.
 """
 
@@ -147,12 +148,18 @@ class GmailApiReadBackend:
     @classmethod
     def from_env(cls) -> GmailApiReadBackend:
         raw = os.environ.get(_ENV_OAUTH_TOKEN, "").strip()
-        if not raw:
+        path = (
+            Path(raw).expanduser()
+            if raw
+            else Path.home() / ".google" / "oauth_token.json"
+        )
+        if not path.is_file():
             raise ValueError(
-                f"Set {_ENV_OAUTH_TOKEN} to the authorized-user JSON file from your OAuth flow "
-                "(must include gmail.readonly)."
+                f"OAuth token not found at {path}. Set {_ENV_OAUTH_TOKEN} or place "
+                "the token at ~/.google/oauth_token.json, then re-consent with "
+                "scripts/gmail_oauth_consent.py (agentkit)."
             )
-        return cls.from_token_path(Path(raw))
+        return cls.from_token_path(path)
 
     def _service(self):
         return build("gmail", "v1", credentials=self._credentials, cache_discovery=False)

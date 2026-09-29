@@ -21,13 +21,27 @@ pip install -e ".[dev,oauth]"
 
 | What | How | Env var |
 |------|-----|---------|
-| `client_secret.json` (OAuth client) | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Clients → download Desktop app JSON to `~/.google/client_secret.json` | *(only during `python scripts/get_oauth_token.py`)* |
-| Google API OAuth token (Gmail + Ads) | `python scripts/get_oauth_token.py` | `GOOGLE_OAUTH_TOKEN` |
+| `client_secret.json` (OAuth client) | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Clients → download Desktop app JSON to `~/.google/client_secret.json` | *(only during consent)* |
+| Google API OAuth token (Gmail + Ads) | `python scripts/get_oauth_token.py` (delegates to agentkit's consent script) | `GOOGLE_OAUTH_TOKEN` (optional; defaults to `~/.google/oauth_token.json`) |
 | SMTP app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → save to `~/.gmail/gmail-smtp-app-password` | `GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE` |
 
-`save` needs **only** `GOOGLE_OAUTH_TOKEN`. `send` also needs SMTP and Brave with `--remote-debugging-port`.
+The token is read from one place for both repos: `/Users/chaehan/.google/oauth_token.json`.
+The re-consent procedure lives in agentkit (`scripts/gmail_oauth_consent.py`);
+this repo's `scripts/get_oauth_token.py` is a wrapper that calls it.
+
+`save` needs **only** the OAuth token. `send` also needs SMTP and Brave with `--remote-debugging-port`.
 
 > **Send Email:** the VPN must unblock the sender address as bypasser website: `https://smtp.gmail.com`
+
+**Gmail failure modes.** `invalid_grant: Token has been expired or revoked.`
+means the OAuth refresh token is dead; re-consent with
+`python scripts/gmail_oauth_consent.py`. `Connection refused` or a timeout means
+the VPN or network blocks `smtp.gmail.com` or the Google API host; fix the
+bypass.
+
+The SMTP send backend now lives in agentkit (`agentkit.gmail.SmtpGmailBackend`,
+also reachable at `agentkit.gmail.cli send`); `invoice_admin/googleads/gmail_smtp.py`
+only re-exports it.
 
 ## CLI
 

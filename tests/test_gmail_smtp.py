@@ -1,4 +1,4 @@
-"""SmtpGmailBackend unit tests (SMTP mocked)."""
+"""The SMTP backend is re-exported from agentkit; send is mocked (no network)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from invoice_admin.googleads.gmail_facade import GmailTransportError
 from invoice_admin.googleads.gmail_smtp import SmtpGmailBackend
 
 
-@patch("invoice_admin.googleads.gmail_smtp.smtplib.SMTP")
+@patch("agentkit.gmail._smtp.smtplib.SMTP")
 def test_smtp_send_text_with_pdf_attachment(
     mock_smtp_class: MagicMock,
     tmp_path: Path,
