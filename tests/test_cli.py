@@ -363,6 +363,8 @@ def test_cli_ingest_email_no_gmail_auth(tmp_path: Path, monkeypatch: pytest.Monk
     """``invoice ingest --email`` without Gmail OAuth token returns 2 (auth error)."""
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
     monkeypatch.delenv("GOOGLE_OAUTH_TOKEN", raising=False)
+    # Isolate HOME so the shared ~/.google/oauth_token.json default is not found.
+    monkeypatch.setenv("HOME", str(tmp_path))
     _write_min_repo(tmp_path)
     from invoice_admin.core.spark_link import spark_deep_link
 
