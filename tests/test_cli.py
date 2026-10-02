@@ -131,7 +131,8 @@ def test_cli_send_dry_run_needs_no_smtp_password(
     with patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send:
         code = main(["send", "--dry-run"])
     assert code == 0
-    mock_send.assert_called_once()
+    assert mock_send.call_args.kwargs["dry_run"] is True
+    assert mock_send.call_args.kwargs["reuse_downloaded"] is False
 
 
 def test_cli_send_requires_smtp_password_for_production(
@@ -178,23 +179,67 @@ def test_cli_send_yes_skips_prompt(
     assert code == 0
     mock_input.assert_not_called()
     assert mock_send.call_args.kwargs["dry_run"] is False
+    assert mock_send.call_args.kwargs["reuse_downloaded"] is True
 
 
-def test_cli_send_prompt_abort(
+def test_cli_send_prompt_no_runs_dry_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Production send aborts (code 2) when the user answers no."""
+    """Answering no downloads and saves (dry run) instead of aborting; SMTP is not needed."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+    from invoice_admin.handlers.outgoing_invoice import OutgoingInvoiceHandler
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", raising=False)
+    monkeypatch.delenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE", raising=False)
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with (
+        patch.object(OutgoingInvoiceHandler, "send_monthly_invoice") as mock_send,
+        patch("builtins.input", return_value="n"),
+    ):
+        code = main(["send"])
+    assert code == 0
+    assert mock_send.call_args.kwargs["dry_run"] is True
+    assert mock_send.call_args.kwargs["reuse_downloaded"] is False
+
+
+def test_cli_send_prompt_eof_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EOF at the prompt aborts (code 2) instead of triggering a dry run."""
     from unittest.mock import MagicMock, patch
 
     from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
 
     monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("GOOGLEADS_GMAIL_SMTP_APP_PASSWORD", "pw")
     _write_min_repo(tmp_path)
     monkeypatch.setattr(
         GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
     )
-    with patch("builtins.input", return_value="n"):
+    with patch("builtins.input", side_effect=EOFError):
+        code = main(["send"])
+    assert code == 2
+
+
+def test_cli_send_prompt_unknown_answer_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Anything other than y/n (and EOF) still aborts."""
+    from unittest.mock import MagicMock, patch
+
+    from invoice_admin.googleads.gmail_api_backend import GmailApiReadBackend
+
+    monkeypatch.setenv("INVOICE_ADMIN_REPO_ROOT", str(tmp_path))
+    _write_min_repo(tmp_path)
+    monkeypatch.setattr(
+        GmailApiReadBackend, "from_env", classmethod(lambda cls: MagicMock())
+    )
+    with patch("builtins.input", return_value="maybe"):
         code = main(["send"])
     assert code == 2
 
@@ -221,6 +266,7 @@ def test_cli_send_prompt_confirms(
         code = main(["send"])
     assert code == 0
     assert mock_send.call_args.kwargs["dry_run"] is False
+    assert mock_send.call_args.kwargs["reuse_downloaded"] is True
 
 
 def test_cli_save_default_provider(

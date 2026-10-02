@@ -65,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
         "--yes",
         "-y",
         action="store_true",
-        help="Skip the interactive confirmation prompt (for scheduled/automated runs)",
+        help="Skip the interactive prompt; reuse a saved invoice for the month when present "
+        "(for scheduled/automated runs)",
     )
 
     p_save = sub.add_parser(
@@ -456,6 +457,34 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
 
     smtp_user = _smtp_login_user()
     is_dry = bool(args.dry_run)
+    reuse_downloaded = bool(args.yes) and not is_dry
+
+    try:
+        gmail_backend = GmailApiReadBackend.from_env()
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+
+    if not is_dry and not args.yes:
+        client_email = str(hcfg["client"]["email"])
+        print(f"About to send invoice to {client_email}:", file=sys.stderr)
+        try:
+            confirm = input("  Confirm? (Y/n; n = dry run): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            confirm = None
+        if confirm in ("", "y", "yes"):
+            reuse_downloaded = True
+        elif confirm in ("n", "no"):
+            is_dry = True
+            reuse_downloaded = False
+            print(
+                "  No: running a dry run instead (download + rename + save, no email).",
+                file=sys.stderr,
+            )
+        else:
+            print("Aborted.", file=sys.stderr)
+            return 2
+
     if not is_dry:
         try:
             smtp_pw = _smtp_app_password_from_env()
@@ -472,23 +501,6 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
     else:
         smtp_pw = "dry-run"
 
-    try:
-        gmail_backend = GmailApiReadBackend.from_env()
-    except ValueError as e:
-        print(str(e), file=sys.stderr)
-        return 2
-
-    if not is_dry and not args.yes:
-        client_email = str(hcfg["client"]["email"])
-        print(f"About to send invoice to {client_email}:", file=sys.stderr)
-        try:
-            confirm = input("  Confirm? (Y/n): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            confirm = "n"
-        if confirm not in ("", "y", "yes"):
-            print("Aborted.", file=sys.stderr)
-            return 2
-
     smtp_backend = SmtpGmailBackend(user=smtp_user, app_password=smtp_pw)
     handler = OutgoingInvoiceHandler(hcfg, gmail_read=gmail_backend, smtp=smtp_backend)
 
@@ -500,6 +512,7 @@ def _cmd_send(args: argparse.Namespace, config: object) -> int:
             smtp_backend=smtp_backend,
             dry_run=is_dry,
             month_label=args.month,
+            reuse_downloaded=reuse_downloaded,
         )
     except RunMonthError as e:
         print(str(e), file=sys.stderr)

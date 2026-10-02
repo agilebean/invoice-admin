@@ -6,8 +6,10 @@ This is the "one command" caller for the month-end workflow. Each real I/O bound
 
 from __future__ import annotations
 
+import re
 import sys
 import time
+from calendar import month_name
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -39,6 +41,77 @@ from invoice_admin.googleads.addresses import (
 
 class RunMonthError(RuntimeError):
     """A step in the monthly flow failed; the message describes what and where."""
+
+
+# Saved invoice filenames embed this marker (see live_brave_download._build_download_filename).
+_SAVED_INVOICE_MARKER = "GoogleAds Invoice"
+
+_MONTH_NUMBERS = {name: i for i, name in enumerate(month_name) if name}
+
+
+def _billing_label_parts(label: str) -> tuple[str, int, int] | None:
+    """(month name, year, month number) from ``"March 2026"`` or ``"2026-03"``; else None."""
+    parts = label.split()
+    if len(parts) == 2 and parts[0] in _MONTH_NUMBERS:
+        try:
+            year = int(parts[1])
+        except ValueError:
+            return None
+        return parts[0], year, _MONTH_NUMBERS[parts[0]]
+    m = re.fullmatch(r"(\d{4})-(\d{2})", label)
+    if m:
+        year, month = int(m.group(1)), int(m.group(2))
+        if 1 <= month <= 12:
+            return month_name[month], year, month
+    return None
+
+
+def _issue_date_in_billing_window(issue_date: date, year: int, month: int) -> bool:
+    """True when the issue date falls in the billing month or the month after it.
+
+    Google issues the monthly invoice at month end or in the first days after it.
+    The window rejects a same-named file from an earlier year.
+    """
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 2, 1)
+    elif month == 11:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month + 2, 1)
+    return start <= issue_date < end
+
+
+def find_downloaded_invoice(
+    directory: Path,
+    *,
+    client_prefix: str,
+    month_label: str,
+) -> tuple[Path, date, Decimal] | None:
+    """Find a previously downloaded invoice for ``month_label`` in ``directory``.
+
+    The saved filename carries the client prefix and the billing month name; the
+    PDF itself carries the issue date. A candidate counts only when both match
+    the requested billing month, so an older month's or another client's file is
+    never reused. Returns ``(path, issue_date, amount_eur)``, or None.
+    """
+    parts = _billing_label_parts(month_label)
+    if parts is None or not directory.is_dir():
+        return None
+    month_name_str, year, month = parts
+    prefix = f"{client_prefix} " if client_prefix else ""
+    pattern = f"*{prefix}{_SAVED_INVOICE_MARKER} {month_name_str}*.pdf"
+    candidates = sorted(
+        directory.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    for candidate in candidates:
+        try:
+            issue_date, amount = parse_invoice_pdf(candidate)
+        except (InvoicePdfError, OSError):
+            continue
+        if _issue_date_in_billing_window(issue_date, year, month):
+            return candidate, issue_date, amount
+    return None
 
 
 @dataclass(frozen=True)
@@ -80,6 +153,8 @@ def run_month(
     dropbox_dir: Path | None = None,
     # Client prefix for filename
     client_prefix: str = "",
+    # Reuse a previously downloaded invoice for this month when one is saved
+    reuse_downloaded: bool = False,
 ) -> RunMonthReport:
     """Run the full monthly invoice flow: Gmail → Brave download → parse → SMTP send."""
     _t0 = time.monotonic()
@@ -95,67 +170,95 @@ def run_month(
 
     steps: list[str] = []
 
-    # 1. Gmail search → billing URL
     label = month_label or billing_month_label_for_previous_calendar_month()
-    _step(1, "Searching Gmail for billing notification...")
-    try:
-        rows = gmail_read_backend.list_messages(
-            billing_query, max_results=max_scan
-        )
-    except GmailTransportError as e:
-        raise RunMonthError(f"Gmail search failed: {e}") from e
-    if not rows:
-        raise RunMonthError(
-            f"No messages found for query {billing_query!r} "
-            f"(tried {max_scan} max). Check the query or your OAuth token."
-        )
+    destination_dir = (
+        dropbox_dir if dropbox_dir is not None else Path(GOOGLE_DRIVE_INVOICE_DIR)
+    ).expanduser()
 
-    _step(2, "Extracting billing URL from Gmail...")
-    billing_url: str | None = None
-    for r in rows:
+    # 0. Reuse a saved invoice from a previous download, when asked and found.
+    reused: tuple[Path, date, Decimal] | None = None
+    if reuse_downloaded:
+        reused = find_downloaded_invoice(
+            destination_dir, client_prefix=client_prefix, month_label=label
+        )
+        if reused is not None:
+            _step(1, f"Using already-downloaded invoice {reused[0].name}...")
+            steps.append(f"Reused downloaded invoice: {reused[0]}")
+        else:
+            print(
+                f"  No downloaded invoice for {label} in {destination_dir}; "
+                f"downloading fresh.",
+                flush=True,
+                file=sys.stderr,
+            )
+
+    if reused is None:
+        # 1. Gmail search → billing URL
+        _step(1, "Searching Gmail for billing notification...")
         try:
-            html = gmail_read_backend.get_message_html(r.id)
-            billing_url = extract_billing_url(html)
-            steps.append(f"Found billing URL in message {r.id}")
-            break
-        except (GmailTransportError, BillingUrlNotFoundError):
-            continue
+            rows = gmail_read_backend.list_messages(
+                billing_query, max_results=max_scan
+            )
+        except GmailTransportError as e:
+            raise RunMonthError(f"Gmail search failed: {e}") from e
+        if not rows:
+            raise RunMonthError(
+                f"No messages found for query {billing_query!r} "
+                f"(tried {max_scan} max). Check the query or your OAuth token."
+            )
 
-    if billing_url is None:
-        raise RunMonthError(
-            f"Scanned {len(rows)} billing messages but found no extractable "
-            f"billing URL."
+        _step(2, "Extracting billing URL from Gmail...")
+        billing_url: str | None = None
+        for r in rows:
+            try:
+                html = gmail_read_backend.get_message_html(r.id)
+                billing_url = extract_billing_url(html)
+                steps.append(f"Found billing URL in message {r.id}")
+                break
+            except (GmailTransportError, BillingUrlNotFoundError):
+                continue
+
+        if billing_url is None:
+            raise RunMonthError(
+                f"Scanned {len(rows)} billing messages but found no extractable "
+                f"billing URL."
+            )
+
+        # 2. Brave download → PDF
+        from invoice_admin.googleads.browser_download import ensure_brave_running
+        from invoice_admin.googleads.live_brave_download import (
+            LiveBraveDownloadError,
+            live_brave_download_pdf,
         )
 
-    # 2. Brave download → PDF
-    from invoice_admin.googleads.browser_download import ensure_brave_running
-    from invoice_admin.googleads.live_brave_download import (
-        LiveBraveDownloadError,
-        live_brave_download_pdf,
-    )
-
-    _step(3, "Launching Brave to download invoice PDF...")
-    ensure_brave_running(debugger_address, launch_timeout_s=11.0)
-    try:
-        pdf_path = live_brave_download_pdf(
-            debugger_address=debugger_address,
-            deeplink_url=billing_url,
-            download_dir=download_dir,
-            navigation_timeout_s=navigation_timeout_s,
-            download_timeout_s=download_timeout_s,
-            verbose=True,
-            client_prefix=client_prefix,
-        )
-    except LiveBraveDownloadError as e:
-        raise RunMonthError(str(e)) from e
-    steps.append(f"PDF downloaded: {pdf_path}")
+        _step(3, "Launching Brave to download invoice PDF...")
+        ensure_brave_running(debugger_address, launch_timeout_s=11.0)
+        try:
+            pdf_path = live_brave_download_pdf(
+                debugger_address=debugger_address,
+                deeplink_url=billing_url,
+                download_dir=download_dir,
+                navigation_timeout_s=navigation_timeout_s,
+                download_timeout_s=download_timeout_s,
+                verbose=True,
+                client_prefix=client_prefix,
+            )
+        except LiveBraveDownloadError as e:
+            raise RunMonthError(str(e)) from e
+        steps.append(f"PDF downloaded: {pdf_path}")
+    else:
+        billing_url = ""
+        pdf_path = reused[0]
 
     # 3. Parse PDF → date + EUR
-    _step(4, "Parsing invoice PDF...")
-    try:
-        issue_date, amount_eur = parse_invoice_pdf(pdf_path)
-    except InvoicePdfError as e:
-        raise RunMonthError(f"Failed to parse invoice PDF: {e}") from e
+    if reused is None:
+        _step(4, "Parsing invoice PDF...")
+        try:
+            issue_date, amount_eur = parse_invoice_pdf(pdf_path)
+        except InvoicePdfError as e:
+            raise RunMonthError(f"Failed to parse invoice PDF: {e}") from e
+    else:
+        issue_date, amount_eur = reused[1], reused[2]
     steps.append(f"Invoice: {issue_date.isoformat()}, EUR {amount_eur}")
 
     # 4. Build artifacts
@@ -196,23 +299,26 @@ def run_month(
             raise RunMonthError(f"SMTP send failed: {e}") from e
         steps.append(f"Email sent (status: {status})")
 
-    _step(7, "Moving file to destination...")
-    dropbox_dir = dropbox_dir or Path(GOOGLE_DRIVE_INVOICE_DIR).expanduser()
-    dropbox_dir.mkdir(parents=True, exist_ok=True)
-    dest = dropbox_dir / pdf_path.name
-    if dest.is_file():
-        stem = dest.stem
-        ext = dest.suffix
-        for i in range(1, 100):
-            alt = dropbox_dir / f"{stem} ({i}){ext}"
-            if not alt.is_file():
-                dest = alt
-                break
-    import shutil
-    shutil.move(str(pdf_path), str(dest))
-    if not dest.is_file():
-        raise RunMonthError(f"File move failed: {pdf_path} -> {dest}")
-    steps.append(f"Moved to: {dest}")
+    if reused is not None:
+        dest = pdf_path
+        steps.append(f"Already in destination: {dest}")
+    else:
+        _step(7, "Moving file to destination...")
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        dest = destination_dir / pdf_path.name
+        if dest.is_file():
+            stem = dest.stem
+            ext = dest.suffix
+            for i in range(1, 100):
+                alt = destination_dir / f"{stem} ({i}){ext}"
+                if not alt.is_file():
+                    dest = alt
+                    break
+        import shutil
+        shutil.move(str(pdf_path), str(dest))
+        if not dest.is_file():
+            raise RunMonthError(f"File move failed: {pdf_path} -> {dest}")
+        steps.append(f"Moved to: {dest}")
 
     _tot = time.monotonic() - _t0
     print(f"  Done ({_tot:.1f}s total)", flush=True)

@@ -64,9 +64,14 @@ invoice                 # unified entry point → invoice_admin.cli
 
 - `send` = monthly invoice to a client (Gmail → Brave download → parse → email → Google Drive).
 - `save` = commission PDF from a provider (Gmail → Downloads staging → commissions folder).
-- `send --dry-run` downloads and prints the invoice fields, no email. `send --yes` skips the
-  confirmation prompt for automated runs. `save --dry-run` skips the prompt and leaves the
-  renamed PDF under `~/Downloads` only.
+- `send --dry-run` downloads, renames and saves the invoice, no email. `save --dry-run`
+  skips the prompt and leaves the renamed PDF under `~/Downloads` only.
+- `send` asks `Confirm? (Y/n; n = dry run)`: **n** runs the download-and-save dry run,
+  **y** sends. On **y** and on `--yes`, an invoice already saved for the billing month
+  (default: the month before the send date) in the client's Google Drive folder is reused
+  without searching Gmail or running Brave, so it must be that month's file: an older
+  month's invoice is never attached.
+- `send --yes` skips the prompt for automated runs and uses the same reuse check.
 - `save --month YYYY-MM` targets one commission month: narrows the Gmail search to that month's
   subject and verifies the found mail derives the same month, failing loudly otherwise.
 
@@ -80,7 +85,7 @@ export GOOGLE_OAUTH_TOKEN="$HOME/.google/oauth_token.json"
 export GOOGLEADS_GMAIL_SMTP_APP_PASSWORD_FILE="$HOME/.gmail/gmail-smtp-app-password"
 export GOOGLEADS_GMAIL_SMTP_USER="chaehan.so@gmail.com"
 
-# Dry run (parse + print fields, no email, no Google Drive):
+# Dry run (download + rename + save to the Google Drive invoice folder, no email):
 invoice send --dry-run
 
 # Commission PDF only (OAuth; no Brave, no SMTP). Dry run writes to ~/Downloads:
@@ -104,6 +109,8 @@ invoice send
 ```
 
 `invoice send` asks for confirmation unless you pass `--yes` (used by `scripts/run-monthly.sh`).
+Answering **n** downloads and saves the invoice without sending. Answering **y** sends, and
+reuses the invoice already saved for that month when one is present.
 
 ## Foyer claims (live portal)
 

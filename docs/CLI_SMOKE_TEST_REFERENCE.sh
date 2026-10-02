@@ -96,9 +96,11 @@ invoice save
 # 11. Send the monthly invoice end‑to‑end: Gmail search → Brave PDF download
 #     → parse date + EUR → rename → SMTP send to the client (with CC/BCC
 #     from the handler YAML).
-#     `--dry-run` downloads and prints the fields without sending and does
-#     not need an SMTP password.  `--yes` skips the confirmation prompt
-#     (used by scripts/run-monthly.sh).
+#     `--dry-run` downloads, renames and saves the PDF without sending and
+#     does not need an SMTP password; answering `n` at the prompt does the
+#     same.  `--yes` skips the confirmation prompt (used by
+#     scripts/run-monthly.sh) and, like `y`, reuses the invoice already saved
+#     for that month when one is present (older months are never reused).
 invoice send --dry-run
 invoice send
 invoice send --yes

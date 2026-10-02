@@ -65,6 +65,7 @@ class OutgoingInvoiceHandler:
         navigation_timeout_s: float = 45,
         download_timeout_s: float = 120,
         max_scan: int = 5,
+        reuse_downloaded: bool = False,
     ) -> Any:
         """Run Gmail → Brave → parse → SMTP → Google Drive using YAML wiring."""
         from invoice_admin.googleads.run_month import run_month
@@ -98,6 +99,7 @@ class OutgoingInvoiceHandler:
             month_label=month_label,
             dropbox_dir=dropbox_dir,
             client_prefix=client_prefix,
+            reuse_downloaded=reuse_downloaded,
         )
 
     def save_commission(
