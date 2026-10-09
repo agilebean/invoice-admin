@@ -36,6 +36,11 @@ def test_extraction_prompt_is_single_brace_json_template() -> None:
     assert "\n{\n" in EXTRACTION_PROMPT
 
 
+def test_extraction_prompt_topic_keeps_document_language() -> None:
+    assert "document's own language" in EXTRACTION_PROMPT
+    assert "German" in EXTRACTION_PROMPT
+
+
 def test_html_prefix_plus_extraction_mentions_html() -> None:
     combo = HTML_EXTRACTION_PREFIX + EXTRACTION_PROMPT
     assert "HTML" in HTML_EXTRACTION_PREFIX

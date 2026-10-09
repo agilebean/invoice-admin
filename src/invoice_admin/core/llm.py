@@ -23,6 +23,20 @@ MODEL_ALIASES: dict[str, str] = dict(DEFAULT_MODEL_ALIASES)
 
 _LM_STUDIO_BASE_URL = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
 
+# DeepSeek v4 models on the OpenCode Go endpoint are reasoning models: hidden
+# reasoning consumes the output budget before any answer is emitted, which can
+# leave `content` empty (see the empty-content guard in agentkit.llm). Extraction
+# and classification want the answer in `content`, so disable thinking for the
+# cloud aliases. Mirrors email-digest's llm.complete.
+_DISABLE_THINKING_ALIASES = ("fast", "smart")
+
+
+def _thinking_extra(alias: str) -> dict[str, Any]:
+    """Extra request fields: disable reasoning for cloud extraction/classification."""
+    if alias in _DISABLE_THINKING_ALIASES:
+        return {"thinking": {"type": "disabled"}}
+    return {}
+
 
 @dataclass
 class LLMCallRecord:
@@ -137,6 +151,7 @@ class LLMProvider:
                 temperature=temperature,
                 aliases=self._aliases,
                 log_fn=_log_fn,
+                **_thinking_extra(model_alias),
             )
             model = record_data.get("model", model_alias)
             return text
@@ -203,6 +218,7 @@ class LLMProvider:
                 temperature=temperature,
                 aliases=self._aliases,
                 log_fn=_log_fn,
+                **_thinking_extra(model_alias),
             )
             model = record_data.get("model", model_alias)
             return text

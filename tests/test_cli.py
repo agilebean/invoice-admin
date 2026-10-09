@@ -18,7 +18,6 @@ classifier_min_confidence: 0.7
 models:
   fast: claude-haiku-4-5
   smart: claude-opus-4-7
-  cheap: deepseek/deepseek-chat
   local: ollama/llama3.1:70b
 notify:
   ntfy_topic: null

@@ -26,7 +26,7 @@ def _cfg(tmp: Path) -> InvoiceConfig:
         llm_calls_path=tmp / "state" / "llm.sqlite",
         classifier_examples_path=tmp / "config" / "classifier_examples.jsonl",
     )
-    models = ModelConfig(fast="f", smart="s", cheap="c", local="l")
+    models = ModelConfig(fast="f", smart="s", local="l")
     notify = NotifyConfig(None, None, None)
     return InvoiceConfig(
         paths=paths,

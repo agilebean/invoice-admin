@@ -35,7 +35,6 @@ class ModelConfig:
 
     fast: str
     smart: str
-    cheap: str
     local: str
 
 
@@ -128,7 +127,6 @@ def load_config(root: Path | None = None) -> InvoiceConfig:
     models_cfg = ModelConfig(
         fast=str(models_block.get("fast", "openai/deepseek/deepseek-v4-flash")),
         smart=str(models_block.get("smart", "openai/deepseek/deepseek-v4-pro")),
-        cheap=str(models_block.get("cheap", "openai/minimax-m2.5")),
         local=str(models_block.get("local", "openai/local-model")),
     )
 

@@ -382,7 +382,6 @@ class ModelConfig:
     """LLM model aliases."""
     fast: str
     smart: str
-    cheap: str
     local: str
 
 
@@ -615,7 +614,6 @@ import litellm
 MODEL_ALIASES: dict[str, str] = {
     "fast":  "claude-haiku-4-5",
     "smart": "claude-opus-4-7",
-    "cheap": "deepseek/deepseek-chat",
     "local": "ollama/llama3.1:70b",
 }
 

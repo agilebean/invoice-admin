@@ -150,7 +150,6 @@ Reuse the `core/llm.py` from Project B (the Topic Summary engine) if that repo i
 MODEL_ALIASES = {
     "fast":  "claude-haiku-4-5",       # classification, simple extraction
     "smart": "claude-opus-4-7",        # PDF extraction with ambiguity, edge cases
-    "cheap": "deepseek/deepseek-chat", # bulk fallback
     "local": "ollama/llama3.1:70b",    # offline fallback
 }
 ```

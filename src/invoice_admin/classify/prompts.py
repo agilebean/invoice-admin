@@ -33,7 +33,7 @@ Extract structured data from this document. Return ONLY a JSON object.
     "iban": "IBAN string or null",
     "bic": "BIC/SWIFT string or null",
     "verwendungszweck": "Payment reference/purpose or null",
-    "document_topic": "Short topic (3-6 words max, e.g. 'medical certificate shoulder', 'plumbing repair invoice', 'insurance receipt') or null"
+    "document_topic": "Short topic in the document's own language (3-6 words max): a German document gets a German topic, an English document an English one. e.g. 'Schulter-Attest', 'plumbing repair invoice', 'Versicherungsbeleg'. Or null"
 }
 
 IMPORTANT: Convert all dates to YYYY-MM-DD format. Return ONLY JSON.

@@ -65,6 +65,41 @@ def test_complete_logs_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert row[1] is not None
 
 
+def test_complete_disables_thinking_for_cloud_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    provider = LLMProvider(log_path=tmp_path / "llm.sqlite")
+    captured: dict[str, object] = {}
+
+    def fake_completion(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+        )
+
+    with patch("agentkit.llm._litellm._post_completion", side_effect=fake_completion):
+        provider.complete("hi", model_alias="fast")
+    assert captured["thinking"] == {"type": "disabled"}
+
+
+def test_complete_leaves_local_thinking_alone(tmp_path: Path) -> None:
+    provider = LLMProvider(log_path=tmp_path / "llm.sqlite")
+    captured: dict[str, object] = {}
+
+    def fake_completion(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+        )
+
+    with patch("agentkit.llm._litellm._post_completion", side_effect=fake_completion):
+        provider.complete("hi", model_alias="local")
+    assert "thinking" not in captured
+
+
 def test_format_llm_cost_report(tmp_path: Path) -> None:
     log_db = tmp_path / "llm.sqlite"
     conn = sqlite3.connect(str(log_db))

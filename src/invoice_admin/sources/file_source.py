@@ -72,7 +72,8 @@ def _extract_metadata_via_ocr(pdf_path: Path) -> tuple[str | None, str | None, s
             "Return ONLY the JSON, no other text:\n"
             '{"vendor": "sender/issuer name or null", '
             '"invoice_date": "YYYY-MM-DD or null", '
-            '"document_topic": "brief topic like shoulder medical receipt or null"}\n\n'
+            '"document_topic": "brief topic in the document own language '
+            '(e.g. German for a German document), or null"}\n\n'
             "Text:\n"
             + text[:5000]
         )
