@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from invoice_admin.core.naming import (
+    _clean_name,
     amount_currency_slug,
     build_invoice_pdf_filename,
     build_invoice_pdf_filename_with_vendor_slug,
@@ -10,7 +11,22 @@ from invoice_admin.core.naming import (
 
 
 def test_slugify_vendor_ascii() -> None:
-    assert slugify_vendor("Klempner Müller") == "klempner-muller"
+    assert slugify_vendor("Klempner Müller") == "klempner-mueller"
+
+
+def test_clean_name_transliterates_german() -> None:
+    assert _clean_name("Feuerstättenbescheid Straße") == "Feuerstaettenbescheid Strasse"
+
+
+def test_build_invoice_pdf_filename_keeps_german_topic() -> None:
+    name = build_invoice_pdf_filename(
+        invoice_date="2026-09-25",
+        vendor="Harry Koska",
+        amount=167.95,
+        currency="EUR",
+        document_topic="Kaminkehrer Rechnungen und Feuerstättenbescheid",
+    )
+    assert "Feuerstaettenbescheid" in name
 
 
 def test_slugify_vendor_empty_fallback() -> None:

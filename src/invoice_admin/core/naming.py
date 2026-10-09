@@ -5,10 +5,18 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
+# German umlauts and ß are transliterated before ASCII normalization so German
+# names stay readable ("Feuerstätten" -> "Feuerstaetten", "Straße" -> "Strasse")
+# instead of losing the mark ("Feuerstatten") or the letter ("Strae").
+_GERMAN_TRANSLIT = str.maketrans(
+    {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}
+)
+
 
 def _clean_name(text: str, max_len: int = 60) -> str:
     """Normalize text for human-readable filenames. Keeps spaces, removes unsafe chars."""
-    s = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    s = text.translate(_GERMAN_TRANSLIT)
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
     s = s.replace("/", "-").replace(":", "-").replace(";", "-")
     s = re.sub(r"\.{2,}", ".", s)
     s = re.sub(r"\s{2,}", " ", s)
